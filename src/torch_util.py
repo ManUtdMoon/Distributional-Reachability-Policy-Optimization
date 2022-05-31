@@ -256,3 +256,10 @@ def gpu_mem_info(as_str=True):
         return {k: _mem_str(v) for k, v in info.items()}
     else:
         return info
+
+def find_max_weight_in_nn(net):
+    layer_maxs = []
+    for name, parameters in net.named_parameters():
+        layer_maxs.append(parameters.abs().max())
+    
+    return layer_maxs

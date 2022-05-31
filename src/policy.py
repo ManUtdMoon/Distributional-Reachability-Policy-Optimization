@@ -77,11 +77,11 @@ class TorchPolicy(BasePolicy, Module):
     def act(self, states, eval):
         with torch.no_grad():
             distr = self.distr(states)
-        return self._special_eval(distr) if self.use_special_eval else distr.sample()
+        return self._special_eval(distr) if eval else distr.sample()
 
 
 class SquashedGaussianPolicy(TorchPolicy):
-    def __init__(self, net, log_std_bounds=(-20,2), std_multiplier=1.0):
+    def __init__(self, net, log_std_bounds=(-6,4), std_multiplier=1.0):
         super().__init__(net)
         self.log_std_bounds = log_std_bounds
         self.std_multiplier = std_multiplier

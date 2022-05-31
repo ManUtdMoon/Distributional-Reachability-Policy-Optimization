@@ -26,7 +26,7 @@ class SMBPO(Configurable, Module):
         model_initial_steps = 10000
         model_steps = 2000
         model_update_period = 250   # how many steps between updating the models
-        save_trajectories = True
+        save_trajectories = False
         horizon = 10
         alive_bonus = 0.0   # alternative: positive, rather than negative, reinforcement
         buffer_min = 5000
@@ -221,6 +221,7 @@ class SMBPO(Configurable, Module):
         log.message(f'Collecting initial virtual data')
         while len(self.virt_buffer) < self.buffer_min:
             self.rollout(self.uniform_policy)
+        log.message(f'Setup done!')
 
     def epoch(self):
         for _ in trange(self.steps_per_epoch):

@@ -19,6 +19,7 @@ class CriticEnsemble(Configurable, Module):
         hidden_layers = 2
         hidden_dim = 256
         learning_rate = 3e-4
+        grad_norm = 5.
 
     def __init__(self, config, state_dim, action_dim):
         Configurable.__init__(self, config)
@@ -50,7 +51,7 @@ class SSAC(BasePolicy, Module):
         init_alpha = 1.0
         autotune_alpha = True
         target_entropy = Optional(float)
-        use_log_alpha_loss = True
+        use_log_alpha_loss = False
         deterministic_backup = False
         critic_update_multiplier = 1
         actor_lr = ACTOR_LR
@@ -105,12 +106,12 @@ class SSAC(BasePolicy, Module):
             self.violation_cost = (r_max - r_min) / self.discount**self.horizon - r_max
         log.message(f'r bounds: [{r_min, r_max}], C = {self.violation_cost}')
 
-    def critic_loss(self, obs, action, next_obs, reward, done):
-        reward = reward.clamp(self.r_min, self.r_max)
-        target = super().compute_target(next_obs, reward, done)
-        if done.any():
-            target[done] = self.terminal_value
-        return self.critic_loss_given_target(obs, action, target)
+    # def critic_loss(self, obs, action, next_obs, reward, done):  # maybe useless
+    #     reward = reward.clamp(self.r_min, self.r_max)
+    #     target = super().compute_target(next_obs, reward, done)
+    #     if done.any():
+    #         target[done] = 0.  # self.terminal_value
+    #     return self.critic_loss_given_target(obs, action, target)
 
     def compute_target(self, next_obs, reward, done, violation):
         with torch.no_grad():
