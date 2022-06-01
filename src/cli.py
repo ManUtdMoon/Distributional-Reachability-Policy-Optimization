@@ -105,5 +105,5 @@ def main(cfg, main):
         json.dump(cfg.vars_recursive(), f, indent=2)
 
     set_seed(cfg.seed)
-    torch.set_num_threads(1)
+    torch.set_num_threads(4)
     main(cfg)

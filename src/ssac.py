@@ -60,7 +60,7 @@ class SSAC(BasePolicy, Module):
         batch_size = 256
         hidden_dim = 256
         hidden_layers = 2
-        update_violation_cost = True
+        update_violation_cost = False  # if ==zero: SMBPO -> MBPO
 
     def __init__(self, config, state_dim, action_dim, horizon,
                  optimizer_factory=OPTIMIZER):
@@ -122,7 +122,7 @@ class SSAC(BasePolicy, Module):
             if not self.deterministic_backup:
                 next_value = next_value - self.alpha.detach() * log_prob
             q = reward + self.discount * (1. - done.float()) * next_value
-            q[violation] = self.violation_value
+            # q[violation] = self.violation_value  # if comment: SMBPO -> MBPO
             return q
 
     def critic_loss_given_target(self, obs, action, target):

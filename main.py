@@ -5,7 +5,7 @@ np.set_printoptions(precision=3, linewidth=120)
 
 from src import cli
 from src.defaults import ROOT_DIR
-from src.log import default_log as log
+from src.log import default_log as log, TabularLog
 from src.checkpoint import CheckpointableData, Checkpointer
 from src.config import BaseConfig, Require
 from src.torch_util import device
@@ -14,18 +14,19 @@ from src.smbpo import SMBPO
 
 
 ROOT_DIR = Path(ROOT_DIR)
-SAVE_PERIOD = 5
+SAVE_PERIOD = 10
 
 
 class Config(BaseConfig):
     env_name = Require(str)
+    env_cfg = {}
     seed = 1
     epochs = 1000
     alg_cfg = SMBPO.Config()
 
 
 def main(cfg):
-    env_factory = lambda: get_env(cfg.env_name)
+    env_factory = lambda: get_env(cfg.env_name, **cfg.env_cfg)
     data = CheckpointableData()
     alg = SMBPO(cfg.alg_cfg, env_factory, data)
     alg.to(device)
@@ -47,14 +48,14 @@ def main(cfg):
 
     if alg.epochs_completed == 0:
         alg.setup()
-
+        eval_tabular_log = TabularLog(log.dir, 'eval.csv')
         # So that we can compare to the performance of randomly initialized policy
-        alg.evaluate()
+        eval_tabular_log.row(alg.evaluate())
 
     while alg.epochs_completed < cfg.epochs:
         log(f'Beginning epoch {alg.epochs_completed+1}')
         alg.epoch()
-        alg.evaluate()
+        eval_tabular_log.row(alg.evaluate())
 
         if alg.epochs_completed % SAVE_PERIOD == 0:
             checkpointer.save(alg.epochs_completed)
