@@ -104,7 +104,7 @@ class SMBPO(Configurable, Module):
                               rewards=reward, dones=done, violations=violation)
             self.steps_sampled += 1
 
-            if done or violation or (len(episode) == max_episode_steps):
+            if done or (len(episode) == max_episode_steps):
                 episode_return = episode.get('rewards').sum().item()
                 episode_length = len(episode)
                 episode_return_plus_bonus = episode_return + episode_length * self.alive_bonus
@@ -165,7 +165,7 @@ class SMBPO(Configurable, Module):
             violations = self.check_violation(next_states)
             buffer.extend(states=states, actions=actions, next_states=next_states,
                           rewards=rewards, dones=dones, violations=violations)
-            continues = ~(dones | violations)
+            continues = ~(dones)
             if continues.sum() == 0:
                 break
             states = next_states[continues]

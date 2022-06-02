@@ -16,6 +16,7 @@ class SafeClassicPendulum(PendulumEnv):
         self.init_state = np.array(init_state, dtype=np.float32).squeeze()
         self.goal_state = np.array(goal_state, dtype=np.float32).squeeze()
         self.threshold = threshold
+        self.margin = 1.
         self.obs_type = obs_type
         self.task = task
         super().__init__(**kwargs)
@@ -65,19 +66,33 @@ class SafeClassicPendulum(PendulumEnv):
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
 
         self.state = np.array([newth, newthdot], np.float32)
-        constraint_value = max(newth - self.threshold, -self.threshold-newth)
+
+        # tight constraint for violation
+        constraint_value = max(
+            angle_normalize(newth) - self.threshold,
+            -self.threshold - angle_normalize(newth)
+        )
         violation = not (constraint_value <= 0.)
         info = dict(
             violation=violation,
             constraint_value=constraint_value
         )
-        return self._get_obs(), -costs, False, info
+
+        # soft constraint for done
+        soft_constraint_value = max(
+            angle_normalize(newth) - self.threshold - self.margin,
+            -angle_normalize(newth) - self.threshold - self.margin,
+        )
+        done = not (soft_constraint_value <= 0.)
+        return self._get_obs(), -costs, done, info
     
     def check_done(self, states: np.array):
         if len(states.shape) == 1:
             states = states[np.newaxis, ...]
         assert len(states.shape) == 2
-        return np.zeros((states.shape[0],), dtype=np.bool_)
+        larger_violations = np.logical_not(self._soft_constraint_values(states) <= 0.)
+        assert len(larger_violations.shape) == 1
+        return larger_violations
 
     def check_violation(self, states: np.array):
         violations = np.logical_not(self._constraint_values(states) <= 0.)
@@ -90,8 +105,20 @@ class SafeClassicPendulum(PendulumEnv):
         assert len(states.shape) == 2
         ths = states[:, 0]
 
-        return np.maximum(ths - self.threshold, -self.threshold - ths)
+        return np.maximum(
+            angle_normalize(ths) - self.threshold,
+            -self.threshold - angle_normalize(ths)
+        )
 
+    def _soft_constraint_values(self, states: np.array):
+        if len(states.shape) == 1:
+            states = states[np.newaxis, ...]
+        assert len(states.shape) == 2
+        ths = states[:, 0]
+        return np.maximum(
+            angle_normalize(ths) - self.threshold - self.margin,
+            -self.threshold - self.margin - angle_normalize(ths)
+        )
 
 if __name__ == '__main__':
     env = SafeClassicPendulum(
