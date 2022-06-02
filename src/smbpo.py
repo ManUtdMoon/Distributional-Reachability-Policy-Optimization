@@ -121,7 +121,7 @@ class SMBPO(Configurable, Module):
                     'collect return (+bonus)': episode_return_plus_bonus,
                     'collect length': episode_length,
                     'collect safe': episode_safe,
-                    **self.evaluate()
+                    # **self.evaluate()
                 })
 
                 if self.save_trajectories:

@@ -60,7 +60,7 @@ class SSAC(BasePolicy, Module):
         batch_size = 256
         hidden_dim = 256
         hidden_layers = 2
-        update_violation_cost = True
+        update_violation_cost = False  # if ==zero: SMBPO -> MBPO
         grad_norm = 5.
 
     def __init__(self, config, state_dim, action_dim, horizon,

@@ -92,6 +92,8 @@ class BaseConfig:
                     existing_val.update(val)
                 elif isinstance(existing_val, TaggedUnion):
                     setattr(self, key, existing_val.parse(val))
+                elif key == 'env_cfg':
+                    setattr(self, key, val)
                 else:
                     raise ValueError(f'Given a dict for key {key}, which is not a BaseConfig or TaggedUnion instance, but rather {existing_val}')
             elif isinstance(val, list):
@@ -139,6 +141,8 @@ class BaseConfig:
                 setattr(self, key, None)
             elif isinstance(val, TaggedUnion):
                 raise ValueError(f'TaggedUnion for key {key} has not been set')
+            elif key == 'env_cfg':
+                pass
             else:
                 assert type(val) in SIMPLE_TYPES, f'Invalid value for key {key}: {val}'
 
