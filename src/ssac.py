@@ -18,8 +18,6 @@ class CriticEnsemble(Configurable, Module):
         n_critics = 2
         hidden_layers = 2
         hidden_dim = 256
-        learning_rate = 3e-4
-        grad_norm = 5.
 
     def __init__(self, config, state_dim, action_dim):
         Configurable.__init__(self, config)
@@ -28,7 +26,6 @@ class CriticEnsemble(Configurable, Module):
         self.qs = torch.nn.ModuleList([
             mlp(dims, squeeze_output=True) for _ in range(self.n_critics)
         ])
-        self.optimizer = torch.optim.Adam(self.qs.parameters(), lr=self.learning_rate)
 
     def all(self, state, action):
         sa = torch.cat([state, action], 1)
@@ -55,12 +52,16 @@ class SSAC(BasePolicy, Module):
         deterministic_backup = False
         critic_update_multiplier = 1
         actor_lr = ACTOR_LR
+        actor_lr_end = 5e-5
+        critic_lr = 3e-4
+        critic_lr_end = 8e-5
         critic_cfg = CriticEnsemble.Config()
         tau = 0.005
         batch_size = 256
         hidden_dim = 256
         hidden_layers = 2
         update_violation_cost = True
+        grad_norm = 5.
 
     def __init__(self, config, state_dim, action_dim, horizon,
                  optimizer_factory=OPTIMIZER):
@@ -68,6 +69,9 @@ class SSAC(BasePolicy, Module):
         Module.__init__(self)
         self.horizon = horizon
         self.violation_cost = 0.0
+        # epochs * steps_per_epoch * solver_updates_per_step
+        # because we cannot pass the higher config to here, so we put it here and it is super ugly. We admit it.
+        self.updates_per_training = 1000 * 1000 * 10
 
         self.actor = SquashedGaussianPolicy(mlp(
             [state_dim, *([self.hidden_dim] * self.hidden_layers), action_dim*2]
@@ -76,7 +80,19 @@ class SSAC(BasePolicy, Module):
         self.critic_target = copy.deepcopy(self.critic)
         freeze_module(self.critic_target)
 
-        self.actor_optimizer = optimizer_factory(self.actor.parameters(), lr=self.actor_lr)
+        self.critic_optimizer = optimizer_factory(self.critic.parameters(), lr=self.critic_lr, weight_decay=1e-4)
+        self.critic_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.critic_optimizer,
+            T_max=self.updates_per_training,
+            eta_min=self.critic_lr_end
+        )
+
+        self.actor_optimizer = optimizer_factory(self.actor.parameters(), lr=self.actor_lr, weight_decay=1e-4)
+        self.actor_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.actor_optimizer,
+            T_max=self.updates_per_training,
+            eta_min=self.actor_lr_end
+        )
 
         log_alpha = torch.tensor(math.log(self.init_alpha), device=device, requires_grad=True)
         self.log_alpha = log_alpha
@@ -122,7 +138,7 @@ class SSAC(BasePolicy, Module):
             if not self.deterministic_backup:
                 next_value = next_value - self.alpha.detach() * log_prob
             q = reward + self.discount * (1. - done.float()) * next_value
-            q[violation] = self.violation_value
+            # q[violation] = self.violation_value
             return q
 
     def critic_loss_given_target(self, obs, action, target):
@@ -135,9 +151,11 @@ class SSAC(BasePolicy, Module):
 
     def update_critic(self, *critic_loss_args):
         critic_loss = self.critic_loss(*critic_loss_args)
-        self.critic.optimizer.zero_grad()
+        self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        self.critic.optimizer.step()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=self.grad_norm)
+        self.critic_optimizer.step()
+        self.critic_lr_scheduler.step()
         update_ema(self.critic_target, self.critic, self.tau)
         return critic_loss.detach()
 
@@ -160,10 +178,14 @@ class SSAC(BasePolicy, Module):
         optimizers = [self.actor_optimizer, self.alpha_optimizer] if self.autotune_alpha else \
                      [self.actor_optimizer]
         assert len(losses) == len(optimizers)
-        for loss, optimizer in zip(losses, optimizers):
+        for i, (loss, optimizer) in enumerate(zip(losses, optimizers)):
             optimizer.zero_grad()
             loss.backward()
+            if i == 0:  # for actor only: clip grad
+                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=self.grad_norm)
             optimizer.step()
+            if i == 0:  # for actor only: lr schedule
+                self.actor_lr_scheduler.step()
 
     def update(self, replay_buffer):
         assert self.critic_update_multiplier >= 1

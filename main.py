@@ -20,7 +20,7 @@ SAVE_PERIOD = 5
 class Config(BaseConfig):
     env_name = Require(str)
     seed = 1
-    epochs = 1000
+    epochs = 600
     alg_cfg = SMBPO.Config()
 
 

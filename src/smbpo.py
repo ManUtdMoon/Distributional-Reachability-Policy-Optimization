@@ -28,7 +28,7 @@ class SMBPO(Configurable, Module):
         model_update_period = 250   # how many steps between updating the models
         save_trajectories = False
         horizon = 10
-        alive_bonus = 0.0   # alternative: positive, rather than negative, reinforcement
+        alive_bonus = 1.0   # alternative: positive, rather than negative, reinforcement
         buffer_min = 5000
         buffer_max = 10**6
         steps_per_epoch = 1000
