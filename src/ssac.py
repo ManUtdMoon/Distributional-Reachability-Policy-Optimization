@@ -71,7 +71,7 @@ class SSAC(BasePolicy, Module):
         self.violation_cost = 0.0
         # epochs * steps_per_epoch * solver_updates_per_step
         # because we cannot pass the higher config to here, so we put it here and it is super ugly. We admit it.
-        self.updates_per_training = 1000 * 1000 * 10
+        self.updates_per_training = 10 * 1000 * 10
 
         self.actor = SquashedGaussianPolicy(mlp(
             [state_dim, *([self.hidden_dim] * self.hidden_layers), action_dim*2]

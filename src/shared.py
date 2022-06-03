@@ -12,12 +12,15 @@ def get_env(env_name, wrap_torch=True, **kwargs):
     from .env.ant_no_bonus import AntNoBonusEnv
     from .env.humanoid_no_bonus import HumanoidNoBonusEnv
     from .env.poles.classic_pendulum import SafeClassicPendulum
+    from .env.poles.inverted_pendulum import SafeInvertedPendulumEnv
     envs = {
         'hopper': HopperNoBonusEnv,
         'cheetah-no-flip': CheetahNoFlipEnv,
         'ant': AntNoBonusEnv,
         'humanoid': HumanoidNoBonusEnv,
         'pendulum-upright': SafeClassicPendulum,
+        'pendulum-tilt': SafeClassicPendulum,
+        'cartpole-upright': SafeInvertedPendulumEnv,
     }
     env = envs[env_name](**kwargs)
     if not (np.all(env.action_space.low == -1.0) and np.all(env.action_space.high == 1.0)):

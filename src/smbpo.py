@@ -36,6 +36,7 @@ class SMBPO(Configurable, Module):
         solver_updates_per_step = 10
         real_fraction = 0.1
         action_clip_gap = 1e-6  # for clipping to promote numerical instability in logprob
+        reward_scale = 1.
 
     def __init__(self, config, env_factory, data):
         Configurable.__init__(self, config)
@@ -181,10 +182,16 @@ class SMBPO(Configurable, Module):
         combined_samples = [
             torch.cat([real, virt]) for real, virt in zip(real_samples, virt_samples)
         ]
-        if self.alive_bonus != 0:
-            REWARD_INDEX = 3
-            assert combined_samples[REWARD_INDEX].ndim == 1
+
+        # reward preprocess
+        REWARD_INDEX = 3
+        assert combined_samples[REWARD_INDEX].ndim == 1
+        if self.reward_scale != 0:
+            combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] * self.reward_scale
+        if self.alive_bonus != 0:    
             combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] + self.alive_bonus
+
+        # learning
         critic_loss = solver.update_critic(*combined_samples)
         self.recent_critic_losses.append(critic_loss)
         if update_actor:
