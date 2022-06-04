@@ -65,6 +65,7 @@ class SMBPO(Configurable, Module):
         self.register_buffer('epochs_completed', torch.tensor(0))
 
         self.recent_critic_losses = []
+        self.recent_cons_critic_losses = []
 
         self.stepper = None
 
@@ -192,8 +193,9 @@ class SMBPO(Configurable, Module):
             combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] + self.alive_bonus
 
         # learning
-        critic_loss = solver.update_critic(*combined_samples)
+        critic_loss, constraint_critic_loss = solver.update_critic(*combined_samples)
         self.recent_critic_losses.append(critic_loss)
+        self.recent_cons_critic_losses.append(constraint_critic_loss)
         if update_actor:
             solver.update_actor_and_alpha(combined_samples[0])
 
@@ -254,6 +256,11 @@ class SMBPO(Configurable, Module):
         self.data.append('critic loss', avg_critic_loss)
         self.recent_critic_losses.clear()
 
+        avg_cons_critic_loss = pythonic_mean(self.recent_cons_critic_losses)
+        log.message(f'Average recent constraint critic loss: {avg_cons_critic_loss}')
+        self.data.append('constraint critic loss', avg_cons_critic_loss)
+        self.recent_cons_critic_losses.clear()
+
         log.message('Buffer sizes:')
         log.message(f'\tReal: {len(self.replay_buffer)}')
         log.message(f'\tVirtual: {len(self.virt_buffer)}')
@@ -270,12 +277,20 @@ class SMBPO(Configurable, Module):
         for which, (states, actions) in sa_data.items():
             if len(states) == 0:
                 mean_q = None
+                mean_qc = None
             else:
                 with torch.no_grad():
                     qs = batch_map(lambda s, a: self.solver.critic.mean(s, a), [states, actions])
+                    qcs = batch_map(
+                        lambda s, a: self.solver.constraint_critic(s, a),
+                        [states, actions]
+                    )
                     mean_q = qs.mean()
+                    mean_qc = qcs.mean()
             log.message(f'Average Q {which}: {mean_q}')
             self.data.append(f'Average Q {which}', mean_q)
+            log.message(f'Average Qc {which}: {mean_qc}')
+            self.data.append(f'Average Qc {which}', mean_qc)
 
         if torch.cuda.is_available():
             log.message(f'GPU memory info: {gpu_mem_info()}')
