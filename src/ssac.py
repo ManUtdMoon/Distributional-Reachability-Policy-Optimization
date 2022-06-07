@@ -41,20 +41,37 @@ class CriticEnsemble(Configurable, Module):
         sa = torch.cat([state, action], 1)
         return random.choice(self.qs)(sa)
 
+
 class ConstraintCritic(Configurable, Module):
     class Config(BaseConfig):
         hidden_layers = 2
         hidden_dim = 256
 
-    def __init__(self, config, state_dim, action_dim):
+    def __init__(self, config, state_dim, action_dim, output_activation=None):
         Configurable.__init__(self, config)
         Module.__init__(self)
         dims = [state_dim + action_dim, *([self.hidden_dim] * self.hidden_layers), 1]
-        self.qc = mlp(dims, squeeze_output=True)
+        self.qc = mlp(dims, output_activation=output_activation, squeeze_output=True)
     
     def forward(self, state, action):
         sa = torch.cat([state, action], 1)
         return self.qc(sa)
+
+
+class MLPMultiplier(Configurable, Module):
+    class Config(BaseConfig) :
+        hidden_layers = 3
+        hidden_dim = 128
+
+    def __init__(self, config, state_dim, action_dim):
+        Configurable.__init__(self, config)
+        Module.__init__(self)
+        dims = [state_dim + action_dim, *([self.hidden_dim] * self.hidden_layers), 1]
+        self.lam = mlp(dims, output_activation='softplus', squeeze_output=True)
+    
+    def forward(self, state, action):
+        sa = torch.cat([state, action], 1)
+        return self.lam(sa)
 
 
 class SSAC(BasePolicy, Module):
@@ -65,6 +82,7 @@ class SSAC(BasePolicy, Module):
         target_entropy = Optional(float)
         use_log_alpha_loss = False
         deterministic_backup = False
+
         critic_update_multiplier = 1
         actor_lr = ACTOR_LR
         actor_lr_end = 5e-5
@@ -73,13 +91,21 @@ class SSAC(BasePolicy, Module):
         critic_cfg = CriticEnsemble.Config()
         constraint_critic_cfg = ConstraintCritic.Config()
         tau = 0.005
+        
         batch_size = 256
         hidden_dim = 256
         hidden_layers = 2
-        update_violation_cost = True  # TODO: if set to False: SMBPO -> MBPO
+        update_violation_cost = False  # TODO: if set to False: SMBPO -> MBPO
+        
         grad_norm = 5.
 
+        # safety-related hyper-params
         constraint_threshold = 1.
+        constrained_fcn = 'cost'
+        mlp_multiplier = False  # TODO: True: statewise; False: Expectation
+        penalty_lb = 0.
+        penalty_ub = 100.
+        multiplier_update_interval = 3
 
     def __init__(self, config, state_dim, action_dim, horizon,
                  optimizer_factory=OPTIMIZER):
@@ -89,21 +115,25 @@ class SSAC(BasePolicy, Module):
         self.violation_cost = 0.0
         # epochs * steps_per_epoch * solver_updates_per_step
         # because we cannot pass the higher config to here, so we put it here and it is super ugly. We admit it.
-        self.updates_per_training = 50 * 200 * 10
+        self.updates_per_training = 50 * 1000 * 10
 
+        # -------- actor & critic (incl. constraint) -------- #
         self.actor = SquashedGaussianPolicy(mlp(
             [state_dim, *([self.hidden_dim] * self.hidden_layers), action_dim*2]
         ))
         self.critic = CriticEnsemble(self.critic_cfg, state_dim, action_dim)
         self.critic_target = copy.deepcopy(self.critic)
         freeze_module(self.critic_target)
-        self.constraint_critic = ConstraintCritic(self.constraint_critic_cfg, state_dim, action_dim)
+        self.constraint_critic = ConstraintCritic(
+            self.constraint_critic_cfg, state_dim, action_dim,
+            output_activation='softplus' if self.constrained_fcn == 'cost' else None
+        )
         self.constraint_critic_target = copy.deepcopy(self.constraint_critic)
         freeze_module(self.constraint_critic_target)
 
         self.critic_optimizer = optimizer_factory(
             list(self.critic.parameters()) + list(self.constraint_critic.parameters()), 
-            lr=self.critic_lr, 
+            lr=self.critic_lr,
             weight_decay=1e-4
         )
         self.critic_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -119,12 +149,29 @@ class SSAC(BasePolicy, Module):
             eta_min=self.actor_lr_end
         )
 
+        # -------- alpha in SAC -------- #
         log_alpha = torch.tensor(math.log(self.init_alpha), device=device, requires_grad=True)
         self.log_alpha = log_alpha
         if self.autotune_alpha:
             self.alpha_optimizer = optimizer_factory([self.log_alpha], lr=self.actor_lr)
         if self.target_entropy is None:
             self.target_entropy = -action_dim   # set target entropy to -dim(A)
+
+        # -------- multiplier for safety -------- #
+        if self.mlp_multiplier:
+            assert 0
+            self.multiplier = None  # TODO
+            self.multiplier_optimizer = None  # TODO
+            self.multiplier_lr_scheduler = None  # TODO
+        else:
+            multiplier_lr = 3e-4
+            self.multiplier = nn.parameter.Parameter(
+                torch.tensor(0.268*math.log(2), device=device, dtype=torch.float)
+            )
+            self.multiplier_optimizer = optimizer_factory(
+                [self.multiplier], 
+                lr=multiplier_lr
+            )
 
         self.criterion = nn.MSELoss()
 
@@ -136,6 +183,12 @@ class SSAC(BasePolicy, Module):
     @property
     def alpha(self):
         return self.log_alpha.exp()
+    
+    @property
+    def lam(self):
+        assert not self.mlp_multiplier
+        assert self.multiplier.shape == ()
+        return nn.functional.softplus(self.multiplier)
 
     @property
     def violation_value(self):
@@ -163,7 +216,7 @@ class SSAC(BasePolicy, Module):
             if not self.deterministic_backup:
                 next_value = next_value - self.alpha.detach() * log_prob
             q = reward + self.discount * (1. - done.float()) * next_value
-            q[violation] = self.violation_value  # TODO: if commented, SMBPO -> MBPO
+            # q[violation] = self.violation_value  # TODO: if commented, SMBPO -> MBPO
             return q
 
     def critic_loss_given_target(self, obs, action, target):
@@ -218,10 +271,22 @@ class SSAC(BasePolicy, Module):
         log_prob = distr.log_prob(action)
         actor_Q = self.critic.random_choice(obs, action)
         alpha = self.alpha
-        actor_loss = torch.mean(alpha.detach() * log_prob - actor_Q)
+        uncstr_actor_loss = torch.mean(alpha.detach() * log_prob - actor_Q)
+
+        # ----- constrained part ----- #
+        actor_Qc = self.constraint_critic(obs, action)
+        if self.mlp_multiplier:
+            assert 0
+            assert lams.shape == actor_Qc.shape
+        else:
+            lams = self.lam
+        cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
+        # ----- constrained part end ----- #
+
+        actor_loss = uncstr_actor_loss + cstr_actor_loss
         if include_alpha:
-            multiplier = self.log_alpha if self.use_log_alpha_loss else alpha
-            alpha_loss = -multiplier * torch.mean(log_prob.detach() + self.target_entropy)
+            alpha_coefficient = self.log_alpha if self.use_log_alpha_loss else alpha
+            alpha_loss = -alpha_coefficient * torch.mean(log_prob.detach() + self.target_entropy)
             return [actor_loss, alpha_loss]
         else:
             return [actor_loss]
@@ -239,6 +304,33 @@ class SSAC(BasePolicy, Module):
             optimizer.step()
             if i == 0:  # for actor only: lr schedule
                 self.actor_lr_scheduler.step()
+    
+    def multiplier_loss(self, obs):
+        distr = self.actor.distr(obs)
+        action = distr.rsample()
+        actor_Qc = self.constraint_critic(obs, action)
+        penalty = torch.clamp(
+            actor_Qc - self.constraint_threshold,
+            min=self.penalty_lb, max=self.penalty_ub
+        )
+        if self.mlp_multiplier:
+            assert 0
+            assert lams.shape == penalty.shape
+        else:
+            lams = self.lam
+        lam_loss = -torch.mean(torch.mul(lams, penalty.detach()))
+
+        return lam_loss
+
+    def update_multiplier(self, obs):
+        losses = self.multiplier_loss(obs)
+        self.multiplier_optimizer.zero_grad()
+        losses.backward()
+        if self.mlp_multiplier:
+            torch.nn.utils.clip_grad_norm_(self.multiplier.parameters(), max_norm=self.grad_norm)
+        self.multiplier_optimizer.step()
+        if self.mlp_multiplier:
+            self.multiplier_lr_scheduler.step()
 
     def update(self, replay_buffer):
         assert self.critic_update_multiplier >= 1

@@ -2,8 +2,6 @@ import numpy as np
 import torch
 from gym.wrappers import RescaleAction
 
-from .sampling import SampleBuffer
-
 
 def get_env(env_name, wrap_torch=True, **kwargs):
     from .env.torch_wrapper import TorchWrapper
@@ -21,6 +19,7 @@ def get_env(env_name, wrap_torch=True, **kwargs):
         'pendulum-upright': SafeClassicPendulum,
         'pendulum-tilt': SafeClassicPendulum,
         'cartpole-upright': SafeInvertedPendulumEnv,
+        'cartpole-move': SafeInvertedPendulumEnv,
     }
     env = envs[env_name](**kwargs)
     if not (np.all(env.action_space.low == -1.0) and np.all(env.action_space.high == 1.0)):
@@ -28,11 +27,3 @@ def get_env(env_name, wrap_torch=True, **kwargs):
     if wrap_torch:
         env = TorchWrapper(env)
     return env
-
-
-class SafetySampleBuffer(SampleBuffer):
-    COMPONENT_NAMES = (*SampleBuffer.COMPONENT_NAMES, 'violations')
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._create_buffer('violations', torch.bool, [])

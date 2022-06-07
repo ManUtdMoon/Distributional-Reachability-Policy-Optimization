@@ -8,8 +8,7 @@ from .env.batch import ProductEnv
 from .env.util import env_dims, get_max_episode_steps
 from .log import default_log as log, TabularLog
 from .policy import UniformPolicy
-from .sampling import sample_episodes_batched
-from .shared import SafetySampleBuffer
+from .sampling import sample_episodes_batched, SafetySampleBuffer
 from .ssac import SSAC
 from .torch_util import Module, DummyModuleWrapper, device, torchify, random_choice, gpu_mem_info, deciles
 from .util import pythonic_mean, batch_map
@@ -175,7 +174,7 @@ class SMBPO(Configurable, Module):
         self.virt_buffer.extend(**buffer.get(as_dict=True))
         return buffer
 
-    def update_solver(self, update_actor=True):
+    def update_solver(self, update_actor=True, update_multiplier=False):
         solver = self.solver
         n_real = int(self.real_fraction * solver.batch_size)
         real_samples = self.replay_buffer.sample(n_real)
@@ -198,11 +197,17 @@ class SMBPO(Configurable, Module):
         self.recent_cons_critic_losses.append(constraint_critic_loss)
         if update_actor:
             solver.update_actor_and_alpha(combined_samples[0])
+        if update_multiplier:
+            solver.update_multiplier(combined_samples[0])
 
     def rollout_and_update(self):
         self.rollout(self.actor)
-        for _ in range(self.solver_updates_per_step):
-            self.update_solver()
+        for step in range(self.solver_updates_per_step):
+            update_multiplier = True if step % self.sac_cfg.multiplier_update_interval == 0 else \
+                                False
+            self.update_solver(
+                update_multiplier=update_multiplier
+            )
 
     def setup(self):
         if self.save_trajectories:
@@ -291,6 +296,13 @@ class SMBPO(Configurable, Module):
             self.data.append(f'Average Q {which}', mean_q)
             log.message(f'Average Qc {which}: {mean_qc}')
             self.data.append(f'Average Qc {which}', mean_qc)
+        
+        if self.sac_cfg.mlp_multiplier:
+            assert 0
+        else:
+            mean_lam = self.solver.lam.detach().item()
+        log.message(f'Average Lambda: {mean_lam}')
+        self.data.append(f'Average Lambda', mean_lam)
 
         if torch.cuda.is_available():
             log.message(f'GPU memory info: {gpu_mem_info()}')
@@ -304,9 +316,13 @@ class SMBPO(Configurable, Module):
         returns = [traj.get('rewards').sum().item() for traj in eval_traj]
         return_mean, return_std = float(np.mean(returns)), float(np.std(returns))
 
+        violations = [traj.get('violations').sum().item() for traj in eval_traj]
+        violation_mean = float(np.mean(violations))
+
         return {
             'eval return mean': return_mean,
             'eval return std': return_std,
             'eval length mean': length_mean,
-            'eval length std': length_std
+            'eval length std': length_std,
+            'eval violation mean': violation_mean
         }
