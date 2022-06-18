@@ -11,6 +11,7 @@ def get_env(env_name, wrap_torch=True, **kwargs):
     from .env.humanoid_no_bonus import HumanoidNoBonusEnv
     from .env.poles.classic_pendulum import SafeClassicPendulum
     from .env.poles.inverted_pendulum import SafeInvertedPendulumEnv
+    from .env.quadrotor.quadrotor import QuadrotorWrapperEnv
     envs = {
         'hopper': HopperNoBonusEnv,
         'cheetah-no-flip': CheetahNoFlipEnv,
@@ -20,7 +21,12 @@ def get_env(env_name, wrap_torch=True, **kwargs):
         'pendulum-tilt': SafeClassicPendulum,
         'cartpole-upright': SafeInvertedPendulumEnv,
         'cartpole-move': SafeInvertedPendulumEnv,
+        'quadrotor': QuadrotorWrapperEnv
     }
+    if env_name != 'quadrotor':
+        assert 'id' in kwargs.keys()
+        kwargs.pop('id')  # the keyword arg 'mode' is only valid for quadrotor env
+
     env = envs[env_name](**kwargs)
     if not (np.all(env.action_space.low == -1.0) and np.all(env.action_space.high == 1.0)):
         env = RescaleAction(env, -1.0, 1.0)

@@ -1,0 +1,17 @@
+{
+    "env_name": "quadrotor",
+    "alg_cfg": {
+      "sac_cfg": {
+        "target_entropy": -2.0,
+        "constraint_threshold": 1.0
+      },
+      "steps_per_epoch": 360,
+      "model_update_period": 90,
+      "model_initial_steps": 2500,
+      "model_steps": 1000,
+      "buffer_min": 3600,
+      "reward_scale": 1.0,
+      "alive_bonus": 2.0
+    },
+    "epochs": 200
+  }

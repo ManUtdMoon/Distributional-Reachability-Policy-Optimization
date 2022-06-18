@@ -36,6 +36,7 @@ class SMBPO(Configurable, Module):
         real_fraction = 0.1
         action_clip_gap = 1e-6  # for clipping to promote numerical instability in logprob
         reward_scale = 1.
+        mode = 'train'
 
     def __init__(self, config, env_factory, data):
         Configurable.__init__(self, config)
@@ -44,7 +45,13 @@ class SMBPO(Configurable, Module):
         self.episode_log = TabularLog(log.dir, 'episodes.csv')
 
         self.real_env = env_factory()
-        self.eval_env = ProductEnv([env_factory() for _ in range(N_EVAL_TRAJ)])
+        if self.mode == 'train':
+            self.eval_env = ProductEnv([env_factory(id=i) for i in range(N_EVAL_TRAJ)])
+        elif self.mode == 'test':
+            self.eval_env = ProductEnv([env_factory(id=i) for i in range(1)])
+        else:
+            log.message(f'Invalid SMBPO mode')
+
         self.state_dim, self.action_dim = env_dims(self.real_env)
 
         self.check_done = lambda states: torchify(self.real_env.check_done(states.cpu().numpy()))
@@ -205,7 +212,10 @@ class SMBPO(Configurable, Module):
         for step in range(self.solver_updates_per_step):
             update_multiplier = True if step % self.sac_cfg.multiplier_update_interval == 0 else \
                                 False
+            update_actor = True if step % self.sac_cfg.actor_update_interval == 0 else \
+                           False
             self.update_solver(
+                update_actor=update_actor,
                 update_multiplier=update_multiplier
             )
 
@@ -250,7 +260,7 @@ class SMBPO(Configurable, Module):
             predicted_states = batch_map(lambda s, a: self.model_ensemble.means(s, a)[0],
                                          [states, actions], cat_dim=1)
         for i in range(self.model_cfg.ensemble_size):
-            errors = torch.norm((predicted_states[i] - next_states) / state_std, dim=1)
+            errors = torch.norm((predicted_states[i] - next_states) / (state_std + 1e-4), dim=1)
             log.message(f'Model {i+1} error deciles: {deciles(errors)}')
 
     def log_statistics(self):
