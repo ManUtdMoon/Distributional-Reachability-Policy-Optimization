@@ -92,6 +92,8 @@ class SSAC(BasePolicy, Module):
         constraint_critic_cfg = ConstraintCritic.Config()
         tau = 0.005
         
+        actor_update_interval = 2
+
         batch_size = 256
         hidden_dim = 256
         hidden_layers = 2
@@ -105,7 +107,7 @@ class SSAC(BasePolicy, Module):
         mlp_multiplier = False  # TODO: True: statewise; False: Expectation
         penalty_lb = 0.
         penalty_ub = 100.
-        multiplier_update_interval = 3
+        multiplier_update_interval = 5
 
     def __init__(self, config, state_dim, action_dim, horizon,
                  optimizer_factory=OPTIMIZER):
@@ -115,7 +117,9 @@ class SSAC(BasePolicy, Module):
         self.violation_cost = 0.0
         # epochs * steps_per_epoch * solver_updates_per_step
         # because we cannot pass the higher config to here, so we put it here and it is super ugly. We admit it.
-        self.updates_per_training = 50 * 1000 * 10
+        self.updates_per_training = 200 * 360 * 10
+        self.lam_updates_num = int(self.updates_per_training / self.multiplier_update_interval)
+        self.actor_updates_num = int(self.updates_per_training / self.actor_update_interval)
 
         # -------- actor & critic (incl. constraint) -------- #
         self.actor = SquashedGaussianPolicy(mlp(
@@ -145,7 +149,7 @@ class SSAC(BasePolicy, Module):
         self.actor_optimizer = optimizer_factory(self.actor.parameters(), lr=self.actor_lr, weight_decay=1e-4)
         self.actor_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             self.actor_optimizer,
-            T_max=self.updates_per_training,
+            T_max=self.actor_updates_num,
             eta_min=self.actor_lr_end
         )
 
