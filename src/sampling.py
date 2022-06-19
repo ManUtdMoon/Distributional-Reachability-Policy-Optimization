@@ -219,6 +219,14 @@ class SafetySampleBuffer(SampleBuffer):
         super().__init__(*args, **kwargs)
         self._create_buffer('violations', torch.bool, [])
 
+class ConstraintSafetySampleBuffer(SafetySampleBuffer):
+    COMPONENT_NAMES = (*SafetySampleBuffer.COMPONENT_NAMES, 'constraint_values')
+
+    def __init__(self, *args, **kwargs):
+        con_dim = kwargs.pop('con_dim')
+        super().__init__(*args, **kwargs)
+        self._create_buffer('constraint_values', torch.float, [con_dim])
+
 
 def concat_sample_buffers(buffers):
     state_dim, action_dim = buffers[0].state_dim, buffers[0].action_dim
@@ -379,7 +387,7 @@ def sample_episodes_batched(env, policy, n_traj, eval=False):
     if not isinstance(env, BaseBatchedEnv):
         env = ProductEnv([env])
 
-    state_dim, action_dim = env_dims(env)
+    state_dim, action_dim, con_dim = env_dims(env)
     discrete_actions = isdiscrete(env.action_space)
     traj_buffer_factory = lambda: SafetySampleBuffer(state_dim, 1 if discrete_actions else action_dim, env._max_episode_steps,
                                                      discrete_actions=discrete_actions)

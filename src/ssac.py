@@ -47,10 +47,10 @@ class ConstraintCritic(Configurable, Module):
         hidden_layers = 2
         hidden_dim = 256
 
-    def __init__(self, config, state_dim, action_dim, output_activation=None):
+    def __init__(self, config, state_dim, action_dim, output_dim, output_activation=None):
         Configurable.__init__(self, config)
         Module.__init__(self)
-        dims = [state_dim + action_dim, *([self.hidden_dim] * self.hidden_layers), 1]
+        dims = [state_dim + action_dim, *([self.hidden_dim] * self.hidden_layers), output_dim]
         self.qc = mlp(dims, output_activation=output_activation, squeeze_output=True)
     
     def forward(self, state, action):
@@ -102,17 +102,20 @@ class SSAC(BasePolicy, Module):
         grad_norm = 5.
 
         # safety-related hyper-params
-        constraint_threshold = 1.
-        constrained_fcn = 'cost'
+        constraint_threshold = 0.
+        constrained_fcn = 'reachability'
         mlp_multiplier = False  # TODO: True: statewise; False: Expectation
         penalty_lb = 0.
         penalty_ub = 100.
         multiplier_update_interval = 5
 
-    def __init__(self, config, state_dim, action_dim, horizon,
+    def __init__(self, config, state_dim, action_dim, con_dim, horizon,
                  optimizer_factory=OPTIMIZER):
         Configurable.__init__(self, config)
         Module.__init__(self)
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.con_dim = con_dim
         self.horizon = horizon
         self.violation_cost = 0.0
         # epochs * steps_per_epoch * solver_updates_per_step
@@ -128,8 +131,9 @@ class SSAC(BasePolicy, Module):
         self.critic = CriticEnsemble(self.critic_cfg, state_dim, action_dim)
         self.critic_target = copy.deepcopy(self.critic)
         freeze_module(self.critic_target)
+        output_dim = self.con_dim if self.constrained_fcn == 'reachability' else 1
         self.constraint_critic = ConstraintCritic(
-            self.constraint_critic_cfg, state_dim, action_dim,
+            self.constraint_critic_cfg, state_dim, action_dim, output_dim=output_dim,
             output_activation='softplus' if self.constrained_fcn == 'cost' else None
         )
         self.constraint_critic_target = copy.deepcopy(self.constraint_critic)
@@ -227,25 +231,33 @@ class SSAC(BasePolicy, Module):
         qs = self.critic.all(obs, action)
         return pythonic_mean([self.criterion(q, target) for q in qs])
 
-    def critic_loss(self, obs, action, next_obs, reward, done, violation):
+    def critic_loss(self, obs, action, next_obs, reward, done, violation, constraint_value):
         target = self.compute_target(next_obs, reward, done, violation)
         return self.critic_loss_given_target(obs, action, target)
     
-    def compute_cons_target(self, next_obs, done, violation):
+    def compute_cons_target(self, next_obs, done, violation, constraint_value):
         with torch.no_grad():
             distr = self.actor.distr(next_obs)
             next_action = distr.sample()
             next_qc_value = self.constraint_critic_target(next_obs, next_action)
 
-            qc = violation.float() + self.discount * (1. - done.float()) * next_qc_value
+            if self.constrained_fcn == 'cost':
+                qc = violation.float() + self.discount * (1. - done.float()) * next_qc_value
+            elif self.constrained_fcn == 'reachability':
+                qc_nonterminal = (1. - self.discount) * constraint_value.float() + self.discount * torch.maximum(constraint_value.float(), next_qc_value)
+                dones = done.tile((self.con_dim, 1)).t().float()
+                qc = qc_nonterminal * (1 - dones.float()) + constraint_value * dones.float()
+                assert qc.shape == qc_nonterminal.shape
+            else:
+                raise NotImplementedError
             return qc
 
     def cons_critic_loss_given_target(self, obs, action, target):
         qcs = self.constraint_critic(obs, action)
         return self.criterion(qcs, target)
 
-    def constraint_critic_loss(self, obs, action, next_obs, reward, done, violation):
-        target = self.compute_cons_target(next_obs, done, violation)
+    def constraint_critic_loss(self, obs, action, next_obs, reward, done, violation, constraint_value):
+        target = self.compute_cons_target(next_obs, done, violation, constraint_value)
         return self.cons_critic_loss_given_target(obs, action, target)
 
     def update_critic(self, *critic_loss_args):
@@ -278,7 +290,12 @@ class SSAC(BasePolicy, Module):
         uncstr_actor_loss = torch.mean(alpha.detach() * log_prob - actor_Q)
 
         # ----- constrained part ----- #
-        actor_Qc = self.constraint_critic(obs, action)
+        if self.constrained_fcn == 'reachability':
+            assert self.constraint_critic(obs, action).size(1) == self.con_dim
+            actor_Qc, _ = torch.max(self.constraint_critic(obs, action), dim=1)
+        else:
+            assert self.constraint_critic(obs, action).size(1) == 1
+            actor_Qc = self.constraint_critic(obs, action)
         if self.mlp_multiplier:
             assert 0
             assert lams.shape == actor_Qc.shape
@@ -312,7 +329,14 @@ class SSAC(BasePolicy, Module):
     def multiplier_loss(self, obs):
         distr = self.actor.distr(obs)
         action = distr.rsample()
-        actor_Qc = self.constraint_critic(obs, action)
+        
+        if self.constrained_fcn == 'reachability':
+            assert self.constraint_critic(obs, action).size(1) == self.con_dim
+            actor_Qc, _ = torch.max(self.constraint_critic(obs, action), dim=1)
+        else:
+            assert self.constraint_critic(obs, action).size(1) == 1
+            actor_Qc = self.constraint_critic(obs, action)
+
         penalty = torch.clamp(
             actor_Qc - self.constraint_threshold,
             min=self.penalty_lb, max=self.penalty_ub
