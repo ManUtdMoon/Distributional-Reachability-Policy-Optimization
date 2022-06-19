@@ -27,7 +27,7 @@ def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False):
     if not isinstance(env, BaseBatchedEnv):
         env = ProductEnv([env])
 
-    state_dim, action_dim = env_dims(env)
+    state_dim, action_dim, _ = env_dims(env)
     discrete_actions = isdiscrete(env.action_space)
     traj_buffer_factory = lambda: SafetySampleBuffer(state_dim, 1 if discrete_actions else action_dim, env._max_episode_steps,
                                                      discrete_actions=discrete_actions)
@@ -192,4 +192,4 @@ def main(epoch_id):
 
 
 if __name__ == '__main__':
-    main(epoch_id=200)
+    main(epoch_id=60)

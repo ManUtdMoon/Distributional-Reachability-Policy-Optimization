@@ -80,7 +80,7 @@ if __name__ == '__main__':
     # MBPO-L
     trj_MBPO = plt_trajectory(
         ax, 'MBPO-Lagrangian',
-        LOGS_DIR / '06-17-22_15.01.14_jhmn' / 'test-2022-06-17-18-26-07'
+        LOGS_DIR / '06-19-22_18.10.52_ctck' / 'test-2022-06-19-20-07-39'
     )
 
     # Plot constraint and ref

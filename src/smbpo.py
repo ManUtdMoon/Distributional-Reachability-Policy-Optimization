@@ -37,7 +37,7 @@ class SMBPO(Configurable, Module):
         action_clip_gap = 1e-6  # for clipping to promote numerical instability in logprob
         reward_scale = 1.
         mode = 'train'
-        constraint_scale = 10.
+        constraint_scale = 5.
         constraint_offset = 0.
 
     def __init__(self, config, env_factory, data):
