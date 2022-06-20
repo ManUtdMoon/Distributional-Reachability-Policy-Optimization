@@ -87,6 +87,7 @@ def build_parser():
     parser = ArgumentParser()
     parser.add_argument('--run-dir', default=None)
     parser.add_argument('--set', default=[], action='append', nargs=2)
+    parser.add_argument('--epoch', default=[], nargs='*', type=int, action='append')
     cli_args = parser.parse_args()
     set_args = dict(cli_args.set)
 
@@ -115,7 +116,7 @@ def build_parser():
     test_log_dir = run_dir / 'test-{}'.format(time_now)
     test_log_dir.mkdir(exist_ok=True, parents=True)
 
-    return cfg, run_dir, test_log_dir
+    return cfg, test_log_dir, cli_args.epoch
 
 
 class Tester(object):
@@ -131,14 +132,16 @@ class Tester(object):
         self.alg = SMBPO(cfg.alg_cfg, env_factory, self.data)
         self.checkpointer = Checkpointer(self.alg, log.dir.parent, 'ckpt_{}.pt')
         self.data_checkpointer = Checkpointer(self.data, log.dir.parent, 'data.pt')
+        self.load_model(epoch_id)
 
+    def load_model(self, epoch_id):
         # Check if existing run
         if self.data_checkpointer.try_load():
             log('Data load succeeded')
             loaded_epoch = self.checkpointer.load_latest([epoch_id])
             if isinstance(loaded_epoch, int):
                 assert loaded_epoch == self.alg.epochs_completed
-                log('Solver load succeeded')
+                log(f'Solver load epoch {epoch_id} succeeded')
             else:
                 assert self.alg.epochs_completed == 0
                 log('Solver load failed')
@@ -179,17 +182,22 @@ class Tester(object):
             np.save(self.test_log_dir / 'coordinates_x_z.npy', np.array([dict(x=x, z=z)]))
 
 
-def main(epoch_id):
+def main():
     # step 1: load config and model
-    cfg, rundir, test_log_dir = build_parser()
-    tester = Tester(cfg, test_log_dir, epoch_id)
+    cfg, test_log_dir, epochs = build_parser()
+    for epoch in epochs[0]:
+        tester = Tester(cfg, test_log_dir, epoch)
 
-    # step 2: run evaluation
-    test_traj, _ = tester.run_evaluation()
+        # step 2: run evaluation
+        test_traj, _ = tester.run_evaluation()
 
-    # step 3: post-evaluating, record, save, print
-    tester.post_process(test_traj)
+        # step 3: post-evaluating, record, save, print
+        tester.post_process(test_traj)
+        break # only the first epoch are recorded
 
 
 if __name__ == '__main__':
-    main(epoch_id=60)
+    # Usage: in the command line, input the followings
+    # $ export PYTHONPATH=$PYTHONPATH:/your/path/to/Safe_MBRL
+    # $ python tester.py --run-dir <log_dir> --set env_name quadrotor --epoch <epoch_id>
+    main()
