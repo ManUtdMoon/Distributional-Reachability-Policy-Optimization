@@ -105,7 +105,7 @@ class SSAC(BasePolicy, Module):
         constraint_threshold = 0.
         constrained_fcn = 'reachability'
         mlp_multiplier = False  # TODO: True: statewise; False: Expectation
-        penalty_lb = 0.
+        penalty_lb = -1.
         penalty_ub = 100.
         multiplier_update_interval = 5
 
