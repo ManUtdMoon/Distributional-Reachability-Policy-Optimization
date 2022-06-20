@@ -105,7 +105,7 @@ class SSAC(BasePolicy, Module):
         constraint_threshold = 0.
         constrained_fcn = 'reachability'
         mlp_multiplier = False  # TODO: True: statewise; False: Expectation
-        penalty_lb = 0.
+        penalty_lb = -0.1
         penalty_ub = 100.
         multiplier_update_interval = 5
 
@@ -128,6 +128,7 @@ class SSAC(BasePolicy, Module):
         self.actor = SquashedGaussianPolicy(mlp(
             [state_dim, *([self.hidden_dim] * self.hidden_layers), action_dim*2]
         ))
+        self.actor_safe = copy.deepcopy(self.actor)
         self.critic = CriticEnsemble(self.critic_cfg, state_dim, action_dim)
         self.critic_target = copy.deepcopy(self.critic)
         freeze_module(self.critic_target)
@@ -157,6 +158,13 @@ class SSAC(BasePolicy, Module):
             eta_min=self.actor_lr_end
         )
 
+        self.actor_safe_optimizer = optimizer_factory(self.actor_safe.parameters(), lr=self.actor_lr, weight_decay=1e-4)
+        self.actor_safe_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.actor_safe_optimizer,
+            T_max=self.actor_updates_num,
+            eta_min=self.actor_lr_end
+        )
+
         # -------- alpha in SAC -------- #
         log_alpha = torch.tensor(math.log(self.init_alpha), device=device, requires_grad=True)
         self.log_alpha = log_alpha
@@ -174,7 +182,7 @@ class SSAC(BasePolicy, Module):
         else:
             multiplier_lr = 3e-4
             self.multiplier = nn.parameter.Parameter(
-                torch.tensor(0.268*math.log(2), device=device, dtype=torch.float)
+                torch.tensor(10., device=device, dtype=torch.float)  # todo: a larger initial multiplier
             )
             self.multiplier_optimizer = optimizer_factory(
                 [self.multiplier], 
@@ -237,13 +245,15 @@ class SSAC(BasePolicy, Module):
     
     def compute_cons_target(self, next_obs, done, violation, constraint_value):
         with torch.no_grad():
-            distr = self.actor.distr(next_obs)
-            next_action = distr.sample()
-            next_qc_value = self.constraint_critic_target(next_obs, next_action)
-
             if self.constrained_fcn == 'cost':
+                distr = self.actor.distr(next_obs)
+                next_action = distr.sample()
+                next_qc_value = self.constraint_critic_target(next_obs, next_action)
                 qc = violation.float() + self.discount * (1. - done.float()) * next_qc_value
             elif self.constrained_fcn == 'reachability':
+                distr = self.actor_safe.distr(next_obs)
+                next_action = distr.sample()
+                next_qc_value = self.constraint_critic_target(next_obs, next_action)
                 qc_nonterminal = (1. - self.discount) * constraint_value.float() + self.discount * torch.maximum(constraint_value.float(), next_qc_value)
                 dones = done.tile((self.con_dim, 1)).t().float()
                 qc = qc_nonterminal * (1 - dones.float()) + constraint_value * dones.float()
@@ -304,27 +314,43 @@ class SSAC(BasePolicy, Module):
         cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
         # ----- constrained part end ----- #
 
+        # ----- safe actor loss ----- #
+        if self.constrained_fcn == 'reachability':
+            distr_safe = self.actor_safe.distr(obs)
+            action_safe = distr_safe.rsample()
+            assert self.constraint_critic(obs, action_safe).size(1) == self.con_dim
+            actor_safe_Qc, _ = torch.max(self.constraint_critic(obs, action_safe), dim=1)
+            actor_safe_loss = torch.mean(actor_safe_Qc)
+        # ----- safe actor loss end ----- #
+
         actor_loss = uncstr_actor_loss + cstr_actor_loss
+        losses = [actor_loss]
         if include_alpha:
             alpha_coefficient = self.log_alpha if self.use_log_alpha_loss else alpha
             alpha_loss = -alpha_coefficient * torch.mean(log_prob.detach() + self.target_entropy)
-            return [actor_loss, alpha_loss]
-        else:
-            return [actor_loss]
+            losses += [alpha_loss]
+        if self.constrained_fcn == 'reachability':
+            losses += [actor_safe_loss]
+        
+        return losses
 
     def update_actor_and_alpha(self, obs):
         losses = self.actor_loss(obs, include_alpha=self.autotune_alpha)
-        optimizers = [self.actor_optimizer, self.alpha_optimizer] if self.autotune_alpha else \
-                     [self.actor_optimizer]
+        optimizers = [self.actor_optimizer, self.alpha_optimizer, self.actor_safe_optimizer] if self.autotune_alpha else \
+                     [self.actor_optimizer, self.actor_safe_optimizer]
         assert len(losses) == len(optimizers)
         for i, (loss, optimizer) in enumerate(zip(losses, optimizers)):
             optimizer.zero_grad()
-            loss.backward()
+            loss.backward(retain_graph=True)
             if i == 0:  # for actor only: clip grad
                 torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=self.grad_norm)
+            if i == 2:
+                torch.nn.utils.clip_grad_norm_(self.actor_safe.parameters(), max_norm=self.grad_norm)
             optimizer.step()
             if i == 0:  # for actor only: lr schedule
                 self.actor_lr_scheduler.step()
+            if i == 2:
+                self.actor_safe_lr_scheduler.step()
     
     def multiplier_loss(self, obs):
         distr = self.actor.distr(obs)
