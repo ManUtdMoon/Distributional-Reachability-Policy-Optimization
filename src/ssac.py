@@ -105,8 +105,9 @@ class SSAC(BasePolicy, Module):
         constraint_threshold = 0.
         constrained_fcn = 'reachability'
         mlp_multiplier = False  # TODO: True: statewise; False: Expectation
-        penalty_lb = -0.1
+        penalty_lb = -1.0
         penalty_ub = 100.
+        penalty_offset = 1.0
         multiplier_update_interval = 5
 
     def __init__(self, config, state_dim, action_dim, con_dim, horizon,
@@ -303,6 +304,8 @@ class SSAC(BasePolicy, Module):
         if self.constrained_fcn == 'reachability':
             assert self.constraint_critic(obs, action).size(1) == self.con_dim
             actor_Qc, _ = torch.max(self.constraint_critic(obs, action), dim=1)
+            # actor_Qc = actor_Qc + (actor_Qc>0).float() * self.penalty_offset
+            actor_Qc = torch.clamp(actor_Qc - self.constraint_threshold, min=self.penalty_lb, max=self.penalty_ub)
         else:
             assert self.constraint_critic(obs, action).size(1) == 1
             actor_Qc = self.constraint_critic(obs, action)
@@ -310,7 +313,7 @@ class SSAC(BasePolicy, Module):
             assert 0
             assert lams.shape == actor_Qc.shape
         else:
-            lams = self.lam
+            lams = self.lam.detach()
         cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
         # ----- constrained part end ----- #
 
