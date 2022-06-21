@@ -297,22 +297,30 @@ class SSAC(BasePolicy, Module):
         log_prob = distr.log_prob(action)
         actor_Q = self.critic.random_choice(obs, action)
         alpha = self.alpha
-        uncstr_actor_loss = torch.mean(alpha.detach() * log_prob - actor_Q)
-
-        # ----- constrained part ----- #
+        actor_soft_Q = alpha.detach() * log_prob - actor_Q
+        
         if self.constrained_fcn == 'reachability':
             assert self.constraint_critic(obs, action).size(1) == self.con_dim
             actor_Qc, _ = torch.max(self.constraint_critic(obs, action), dim=1)
         else:
             assert self.constraint_critic(obs, action).size(1) == 1
             actor_Qc = self.constraint_critic(obs, action)
-        if self.mlp_multiplier:
-            assert 0
-            assert lams.shape == actor_Qc.shape
-        else:
-            lams = self.lam
-        cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
+
+        # ----- constrained part ----- #
+        # if self.mlp_multiplier:
+        #     assert 0
+        #     assert lams.shape == actor_Qc.shape
+        # else:
+        #     lams = self.lam
+        # cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
         # ----- constrained part end ----- #
+
+        # ----- CRPO-style actor loss start ----- #
+        violated = (actor_Qc - self.constraint_threshold) > 0.
+        assert violated.shape == actor_soft_Q.shape
+        uncstr_actor_loss = torch.mean( (1. - violated.float()) * actor_soft_Q )
+        cstr_actor_loss = torch.mean(violated.float() * actor_Qc)
+        # ----- CRPO-style actor loss end ----- #
 
         # ----- safe actor loss ----- #
         if self.constrained_fcn == 'reachability':

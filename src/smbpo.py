@@ -38,7 +38,7 @@ class SMBPO(Configurable, Module):
         reward_scale = 1.
         mode = 'train'
         constraint_scale = 5.
-        constraint_offset = 0.
+        constraint_offset = 0.5
 
     def __init__(self, config, env_factory, data):
         Configurable.__init__(self, config)
@@ -140,6 +140,7 @@ class SMBPO(Configurable, Module):
                     'collect return (+bonus)': episode_return_plus_bonus,
                     'collect length': episode_length,
                     'collect safe': episode_safe,
+                    'done': done
                     # **self.evaluate()
                 })
 
@@ -166,10 +167,10 @@ class SMBPO(Configurable, Module):
         log.message(f'\tLast {LOSS_AVERAGE_WINDOW}: {end_loss_average}')
         log.message(f'\tDeciles: {deciles(model_losses)}')
 
-        buffer_rewards = self.replay_buffer.get('rewards')
-        r_min = buffer_rewards.min().item() + self.alive_bonus
-        r_max = buffer_rewards.max().item() + self.alive_bonus
-        self.solver.update_r_bounds(r_min, r_max)
+        # buffer_rewards = self.replay_buffer.get('rewards')
+        # r_min = buffer_rewards.min().item() + self.alive_bonus
+        # r_max = buffer_rewards.max().item() + self.alive_bonus
+        # self.solver.update_r_bounds(r_min, r_max)
 
     def rollout(self, policy, initial_states=None):
         if initial_states is None:
@@ -221,8 +222,8 @@ class SMBPO(Configurable, Module):
         self.recent_cons_critic_losses.append(constraint_critic_loss)
         if update_actor:
             solver.update_actor_and_alpha(combined_samples[0])
-        if update_multiplier:
-            solver.update_multiplier(combined_samples[0])
+        # if update_multiplier:
+        #     solver.update_multiplier(combined_samples[0])
 
     def rollout_and_update(self):
         self.rollout(self.actor)
