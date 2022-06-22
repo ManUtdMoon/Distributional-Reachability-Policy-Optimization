@@ -107,7 +107,6 @@ class SSAC(BasePolicy, Module):
         mlp_multiplier = False  # TODO: True: statewise; False: Expectation
         penalty_lb = -1.0
         penalty_ub = 100.
-        penalty_offset = 1.0
         multiplier_update_interval = 5
 
     def __init__(self, config, state_dim, action_dim, con_dim, horizon,
@@ -314,7 +313,8 @@ class SSAC(BasePolicy, Module):
             assert lams.shape == actor_Qc.shape
         else:
             lams = self.lam.detach()
-        cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
+        # cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
+        cstr_actor_loss = torch.mean(15.0 * actor_Qc)
         # ----- constrained part end ----- #
 
         # ----- safe actor loss ----- #
