@@ -109,7 +109,7 @@ class SSAC(BasePolicy, Module):
         # safety-related hyper-params
         constraint_threshold = 0.
         constrained_fcn = 'reachability'
-        mlp_multiplier = False
+        mlp_multiplier = True
         penalty_lb = -1.0
         penalty_ub = 100.
         # penalty_offset = 1.0
@@ -390,7 +390,14 @@ class SSAC(BasePolicy, Module):
             assert lams.shape == penalty.shape
             lams_safe = torch.mul(safe_Qc<=0, lams)
             lams_unsafe = torch.mul(safe_Qc>0, lams)
-            lam_loss = -0.2*torch.mean(torch.mul(lams_safe, penalty.detach())) + self.criterion(lams_unsafe,(safe_Qc>0)*19.0)
+            
+            '''Special lam loss
+            For safe states, learn their lam: 0 or finite vlaues
+            For unsafe states, want their lams to be close to 19, a large penalty
+                why 19.0: because the upperbound of lams is 20, to avoid grad vanishing
+            '''
+            lam_loss = -0.2 * torch.mean(torch.mul(lams_safe, penalty.detach())) + \
+                       self.criterion(lams_unsafe, (safe_Qc>0) * 19.0)
         else:
             lams = self.lam
             lam_loss = -torch.mean(torch.mul(lams, penalty.detach()))
