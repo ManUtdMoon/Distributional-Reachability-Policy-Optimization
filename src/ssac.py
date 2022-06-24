@@ -61,17 +61,19 @@ class ConstraintCritic(Configurable, Module):
 class MLPMultiplier(Configurable, Module):
     class Config(BaseConfig) :
         hidden_layers = 3
-        hidden_dim = 128
+        hidden_dim = 256
 
     def __init__(self, config, state_dim, action_dim):
         Configurable.__init__(self, config)
         Module.__init__(self)
         dims = [state_dim + action_dim, *([self.hidden_dim] * self.hidden_layers), 1]
-        self.lam = mlp(dims, output_activation='softplus', squeeze_output=True)
+        self.lam = mlp(dims, activation='tanh', output_activation='identity', squeeze_output=True)
     
     def forward(self, state, action):
         sa = torch.cat([state, action], 1)
-        return self.lam(sa)
+        lam = 10.0 + 10.0 * torch.tanh(self.lam(sa)/10)
+        # print('lam', lam)
+        return lam
 
 
 class SSAC(BasePolicy, Module):
@@ -88,8 +90,11 @@ class SSAC(BasePolicy, Module):
         actor_lr_end = 5e-5
         critic_lr = 3e-4
         critic_lr_end = 8e-5
+        multiplier_lr = 3e-4
+        multiplier_lr_end = 1e-5
         critic_cfg = CriticEnsemble.Config()
         constraint_critic_cfg = ConstraintCritic.Config()
+        mlp_multiplier_cfg = MLPMultiplier.Config()
         tau = 0.005
         
         actor_update_interval = 2
@@ -104,9 +109,11 @@ class SSAC(BasePolicy, Module):
         # safety-related hyper-params
         constraint_threshold = 0.
         constrained_fcn = 'reachability'
-        mlp_multiplier = False  # TODO: True: statewise; False: Expectation
+        mlp_multiplier = False
         penalty_lb = -1.0
         penalty_ub = 100.
+        # penalty_offset = 1.0
+        fixed_multiplier = 15.0
         multiplier_update_interval = 5
 
     def __init__(self, config, state_dim, action_dim, con_dim, horizon,
@@ -175,18 +182,20 @@ class SSAC(BasePolicy, Module):
 
         # -------- multiplier for safety -------- #
         if self.mlp_multiplier:
-            assert 0
-            self.multiplier = None  # TODO
-            self.multiplier_optimizer = None  # TODO
-            self.multiplier_lr_scheduler = None  # TODO
+            self.multiplier = MLPMultiplier(self.mlp_multiplier_cfg, state_dim, action_dim)
+            self.multiplier_optimizer = optimizer_factory(self.multiplier.parameters(), lr=self.multiplier_lr, weight_decay=1e-4)
+            self.multiplier_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.multiplier_optimizer,
+                T_max=self.lam_updates_num,
+                eta_min=self.multiplier_lr_end
+            )
         else:
-            multiplier_lr = 3e-4
             self.multiplier = nn.parameter.Parameter(
                 torch.tensor(10., device=device, dtype=torch.float)  # todo: a larger initial multiplier
             )
             self.multiplier_optimizer = optimizer_factory(
                 [self.multiplier], 
-                lr=multiplier_lr
+                lr=self.multiplier_lr
             )
 
         self.criterion = nn.MSELoss()
@@ -304,17 +313,20 @@ class SSAC(BasePolicy, Module):
             assert self.constraint_critic(obs, action).size(1) == self.con_dim
             actor_Qc, _ = torch.max(self.constraint_critic(obs, action), dim=1)
             # actor_Qc = actor_Qc + (actor_Qc>0).float() * self.penalty_offset
-            actor_Qc = torch.clamp(actor_Qc - self.constraint_threshold, min=self.penalty_lb, max=self.penalty_ub)
         else:
             assert self.constraint_critic(obs, action).size(1) == 1
             actor_Qc = self.constraint_critic(obs, action)
         if self.mlp_multiplier:
-            assert 0
+            with torch.no_grad():
+                action_safe = self.actor_safe.act(obs, eval=True)
+                # safe_Qc, _ = torch.max(self.constraint_critic(obs, action_safe), dim=1)
+                lams = torch.max(self.multiplier(obs, action), (actor_Qc>0)*19.0).detach()
             assert lams.shape == actor_Qc.shape
         else:
-            lams = self.lam.detach()
-        # cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
-        cstr_actor_loss = torch.mean(15.0 * actor_Qc)
+            # lams = self.lam.detach()
+            lams = 15.0
+            actor_Qc = torch.clamp(actor_Qc, min=self.penalty_lb, max=self.penalty_ub)
+        cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
         # ----- constrained part end ----- #
 
         # ----- safe actor loss ----- #
@@ -370,12 +382,18 @@ class SSAC(BasePolicy, Module):
             actor_Qc - self.constraint_threshold,
             min=self.penalty_lb, max=self.penalty_ub
         )
+        # penalty = penalty + (penalty>0).float() * self.penalty_offset
         if self.mlp_multiplier:
-            assert 0
+            action_safe = self.actor_safe.act(obs, eval=True)
+            safe_Qc, _ = torch.max(self.constraint_critic(obs, action_safe), dim=1)
+            lams = self.multiplier(obs, action)
             assert lams.shape == penalty.shape
+            lams_safe = torch.mul(safe_Qc<=0, lams)
+            lams_unsafe = torch.mul(safe_Qc>0, lams)
+            lam_loss = -0.2*torch.mean(torch.mul(lams_safe, penalty.detach())) + self.criterion(lams_unsafe,(safe_Qc>0)*19.0)
         else:
             lams = self.lam
-        lam_loss = -torch.mean(torch.mul(lams, penalty.detach()))
+            lam_loss = -torch.mean(torch.mul(lams, penalty.detach()))
 
         return lam_loss
 

@@ -110,7 +110,7 @@ class SMBPO(Configurable, Module):
             next_state, reward, done, info = self.real_env.step(action)
             violation = info['violation']
             constraint_value = torch.tensor(info['constraint_value'], dtype=torch.float)
-            assert done == self.check_done(next_state.unsqueeze(0))[0]
+            assert done == self.check_done(next_state.unsqueeze(0))[0], print(done, self.check_done(next_state.unsqueeze(0))[0], next_state)
             assert violation == self.check_violation(next_state.unsqueeze(0))[0]
             # print('constraint_value', constraint_value)
             # print('get_constraint_value', self.get_constraint_value(next_state.unsqueeze(0)).cpu())
@@ -325,7 +325,7 @@ class SMBPO(Configurable, Module):
             self.data.append(f'Average Qc {which}', mean_qc)
         
         if self.sac_cfg.mlp_multiplier:
-            assert 0
+            mean_lam = 'TODO'  # TODO
         else:
             mean_lam = self.solver.lam.detach().item()
         log.message(f'Average Lambda: {mean_lam}')

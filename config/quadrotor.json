@@ -3,7 +3,10 @@
     "alg_cfg": {
       "sac_cfg": {
         "target_entropy": -2.0,
-        "constraint_threshold": 0.0
+        "constraint_threshold": -0.5,
+        "mlp_multiplier": true,
+        "penalty_lb": -1.0,
+        "penalty_ub": 100.0
       },
       "steps_per_epoch": 360,
       "model_update_period": 90,

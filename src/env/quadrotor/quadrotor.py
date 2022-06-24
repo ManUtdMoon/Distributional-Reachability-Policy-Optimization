@@ -90,8 +90,8 @@ class QuadrotorWrapperEnv(Wrapper):
             states = states[np.newaxis, ...]
         assert len(states.shape) == 2
 
-        x_threshold = 10
-        z_threshold = 10
+        x_threshold = self.env.x_threshold
+        z_threshold = self.env.z_threshold
         theta_threshold_radians = 85 * math.pi / 180
 
         x = states[:, 0]

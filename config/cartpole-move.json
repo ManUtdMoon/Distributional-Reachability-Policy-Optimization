@@ -6,7 +6,10 @@
   "alg_cfg": {
     "sac_cfg": {
       "target_entropy": -1.0,
-      "constraint_threshold": 0.5
+      "constraint_threshold": 0.0,
+      "penalty_lb": -5.0,
+      "penalty_ub": 100.0,
+      "fixed_multiplier": 25.0
     },
     "steps_per_epoch": 1000,
     "model_update_period": 250,
@@ -14,7 +17,8 @@
     "model_steps": 1000,
     "buffer_min": 2500,
     "reward_scale": 5.0,
-    "alive_bonus": 0.0
+    "alive_bonus": 0.0,
+    "constraint_scale": 100.0
   },
   "epochs": 50
 }

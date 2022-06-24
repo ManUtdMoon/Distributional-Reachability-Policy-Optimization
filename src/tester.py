@@ -5,6 +5,7 @@ import datetime
 from pathlib import Path
 
 import numpy as np
+from pyrsistent import v
 
 import torch
 
@@ -135,6 +136,7 @@ class Tester(object):
         self.load_model(epoch_id)
 
     def load_model(self, epoch_id):
+        self.epoch_id = epoch_id
         # Check if existing run
         if self.data_checkpointer.try_load():
             log('Data load succeeded')
@@ -181,6 +183,12 @@ class Tester(object):
 
             np.save(self.test_log_dir / 'coordinates_x_z.npy', np.array([dict(x=x, z=z)]))
 
+        elif self.cfg.env_name == 'cartpole-move':
+            states = trajs[0].get('states').cpu().numpy()
+            x = states[:, 0]
+            theta = states[:, 1]
+
+            np.save(self.test_log_dir / 'traj_' + str(self.epoch_id) + '.npy', np.array([dict(x=x, theta=theta)]))
 
 def main():
     # step 1: load config and model

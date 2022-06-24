@@ -34,6 +34,8 @@ class SafeInvertedPendulumEnv(InvertedPendulumEnv):
             active_dims=[0, 1]
         )
 
+        self.con_dim = 4  # lb & ub
+
         self._max_episode_steps = 1000
         super().__init__()
         EzPickle.__init__(self, threshold=threshold, task=task)  # deepcopy calls `get_state`
@@ -102,6 +104,20 @@ class SafeInvertedPendulumEnv(InvertedPendulumEnv):
             return self.constraints.get_value(states)  # (n, con_num)
         else:
             return self.constraints.get_value(states).squeeze() # (con_num,)
+
+    def get_constraint_values(self, states):
+        '''Compute the constraints values given states
+
+        params:
+            states shape: (n, dim_s) or (dim_s)
+        return:
+            constraint_value: shape (n, self.con_dim) or (self.con_dim,)
+        '''
+        if len(states.shape) == 1:
+            states = states[np.newaxis, ...]
+        assert len(states.shape) == 2
+
+        return np.squeeze(self.constraints.get_value(states))
 
 if __name__ == "__main__":
     env = SafeInvertedPendulumEnv(

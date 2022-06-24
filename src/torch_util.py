@@ -1,4 +1,4 @@
-from logging import warn
+from logging import warning
 import operator
 
 import numpy as np
@@ -171,7 +171,9 @@ KNOWN_ACTIVATIONS = {
     'sigmoid': nn.Sigmoid,
     'softmax': lambda: nn.Softmax(dim=1),
     'softplus': nn.Softplus,
-    'tanh': nn.Tanh
+    'tanh': nn.Tanh,
+    'identity':nn.Identity,
+    'gelu':nn.GELU
 }
 
 def _process_activation(activation):
@@ -200,7 +202,7 @@ def mlp(dims, layer_factory=nn.Linear, activation='relu', output_activation=None
         if dims[-1] == 1:
             layers.append(Squeeze(1))
         else:
-            warn('output dim is not 1!!!, squeeze_output is not used')
+            warning('output dim is not 1!!!, squeeze_output is not used')
     net = nn.Sequential(*layers)
     net.apply(weight_initializer())
     net.to(device=device, dtype=torch.float)
