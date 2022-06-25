@@ -317,16 +317,26 @@ class SMBPO(Configurable, Module):
                         lambda s, a: self.solver.constraint_critic(s, a),
                         [states, actions]
                     )
+                    if self.sac_cfg.mlp_multiplier:
+                        lams = batch_map(
+                            lambda s, a: self.solver.multiplier(s, a),
+                            [states, actions]
+                        )
+                        mean_lam = lams.mean()
+
                     mean_q = qs.mean()
+                    if self.sac_cfg.constrained_fcn == 'reachability':
+                        qcs, _ = torch.max(qcs, dim=-1)
                     mean_qc = qcs.mean()
             log.message(f'Average Q {which}: {mean_q}')
             self.data.append(f'Average Q {which}', mean_q)
             log.message(f'Average Qc {which}: {mean_qc}')
             self.data.append(f'Average Qc {which}', mean_qc)
+            if self.sac_cfg.mlp_multiplier:
+                log.message(f'Average Lambda {which}: {mean_lam}')
+                self.data.append(f'Average Lambda {which}', mean_lam)
         
-        if self.sac_cfg.mlp_multiplier:
-            mean_lam = 'TODO'  # TODO
-        else:
+        if not self.sac_cfg.mlp_multiplier:
             mean_lam = self.solver.lam.detach().item()
         log.message(f'Average Lambda: {mean_lam}')
         self.data.append(f'Average Lambda', mean_lam)

@@ -231,7 +231,7 @@ class Vizer_set(object):
             return cax
 
         for metric in metrics:
-            assert metric in ['qc']
+            assert metric in ['lam']
 
         fig, axes = plt.subplots(nrows=len(metrics), ncols=len(self.batch_obses_list),
                                  figsize=(12, 3),
@@ -247,16 +247,17 @@ class Vizer_set(object):
             ct_list = []
             for i, obses in enumerate(self.batch_obses_list):
                 states = torch.from_numpy(obses).float().to(device)
-                actions = self.tester.alg.solver.act(states, eval=True)
-                qcs = self.tester.alg.solver.multiplier(states, actions)
+                actions = self.tester.alg.solver.actor_safe.act(states, eval=True)
+                safe_Qc, _ = torch.max(self.tester.alg.solver.constraint_critic(states, actions), dim=1)
+                lams = self.tester.alg.solver.multiplier(states, safe_Qc)
                 # qcs = self.tester.alg.solver.constraint_critic(states, actions)
                 # if self.tester.alg.solver.constrained_fcn == 'reachability':
                 #     qcs, _ = torch.max(qcs, dim=1)
 
-                flatten_qcs = qcs.cpu().numpy()# - np.mean(qcs.cpu().numpy())
+                flatten_lams = lams.cpu().numpy()# - np.mean(qcs.cpu().numpy())
                 # print('lam mean:', np.mean(qcs.cpu().numpy()))
 
-                NAME2VALUE = dict(zip(['qc'], [flatten_qcs]))
+                NAME2VALUE = dict(zip(['lam'], [flatten_lams]))
                 val = NAME2VALUE[metric].reshape(self.X.shape)
 
                 min_val_list.append(np.min(val))
@@ -326,7 +327,7 @@ def main():
             vizer = Vizer_set(cfg, test_log_dir, epoch, bound=[-1.5, 1.5, 0, 2])
         else:
             vizer.tester.load_model(epoch)
-        vizer.plot_region(['qc'])
+        vizer.plot_region(['lam'])
 
 
 if __name__ == '__main__':

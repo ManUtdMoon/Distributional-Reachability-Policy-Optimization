@@ -60,19 +60,20 @@ class ConstraintCritic(Configurable, Module):
 
 class MLPMultiplier(Configurable, Module):
     class Config(BaseConfig) :
-        hidden_layers = 3
+        hidden_layers = 2
         hidden_dim = 256
+        upper_bound = 50.
 
-    def __init__(self, config, state_dim, action_dim):
+    def __init__(self, config, state_dim):
         Configurable.__init__(self, config)
         Module.__init__(self)
-        dims = [state_dim + action_dim, *([self.hidden_dim] * self.hidden_layers), 1]
+        dims = [state_dim + 1, *([self.hidden_dim] * self.hidden_layers), 1]
         self.lam = mlp(dims, activation='tanh', output_activation='identity', squeeze_output=True)
     
-    def forward(self, state, action):
-        sa = torch.cat([state, action], 1)
-        lam = 10.0 + 10.0 * torch.tanh(self.lam(sa)/10)
-        # print('lam', lam)
+    def forward(self, state, Qc):
+        states_aug = torch.cat([state, Qc.unsqueeze(-1)], 1)
+        lam = self.upper_bound/2. * \
+            (1. + torch.tanh( self.lam(states_aug)/self.upper_bound*2 ))
         return lam
 
 
@@ -110,11 +111,14 @@ class SSAC(BasePolicy, Module):
         constraint_threshold = 0.
         constrained_fcn = 'reachability'
         mlp_multiplier = True
+        max_multiplier = 50.0
         penalty_lb = -1.0
         penalty_ub = 100.
         # penalty_offset = 1.0
         fixed_multiplier = 15.0
         multiplier_update_interval = 5
+
+        lam_epsilon = 1.0
 
     def __init__(self, config, state_dim, action_dim, con_dim, horizon,
                  optimizer_factory=OPTIMIZER):
@@ -127,7 +131,7 @@ class SSAC(BasePolicy, Module):
         self.violation_cost = 0.0
         # epochs * steps_per_epoch * solver_updates_per_step
         # because we cannot pass the higher config to here, so we put it here and it is super ugly. We admit it.
-        self.updates_per_training = 200 * 360 * 10
+        self.updates_per_training = 50 * 1000 * 10
         self.lam_updates_num = int(self.updates_per_training / self.multiplier_update_interval)
         self.actor_updates_num = int(self.updates_per_training / self.actor_update_interval)
 
@@ -182,7 +186,7 @@ class SSAC(BasePolicy, Module):
 
         # -------- multiplier for safety -------- #
         if self.mlp_multiplier:
-            self.multiplier = MLPMultiplier(self.mlp_multiplier_cfg, state_dim, action_dim)
+            self.multiplier = MLPMultiplier(self.mlp_multiplier_cfg, state_dim, self.max_multiplier)
             self.multiplier_optimizer = optimizer_factory(self.multiplier.parameters(), lr=self.multiplier_lr, weight_decay=1e-4)
             self.multiplier_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.multiplier_optimizer,
@@ -319,12 +323,13 @@ class SSAC(BasePolicy, Module):
         if self.mlp_multiplier:
             with torch.no_grad():
                 action_safe = self.actor_safe.act(obs, eval=True)
-                # safe_Qc, _ = torch.max(self.constraint_critic(obs, action_safe), dim=1)
-                lams = torch.max(self.multiplier(obs, action), (actor_Qc>0)*19.0).detach()
+                safe_Qc, _ = torch.max(self.constraint_critic(obs, action_safe), dim=1)
+                # lams = torch.max(self.multiplier(obs, action), (actor_Qc>0)*19.0).detach()
+                lams = self.multiplier(obs, safe_Qc)
             assert lams.shape == actor_Qc.shape
         else:
             # lams = self.lam.detach()
-            lams = 15.0
+            lams = self.fixed_multiplier
             actor_Qc = torch.clamp(actor_Qc, min=self.penalty_lb, max=self.penalty_ub)
         cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
         # ----- constrained part end ----- #
@@ -385,19 +390,23 @@ class SSAC(BasePolicy, Module):
         # penalty = penalty + (penalty>0).float() * self.penalty_offset
         if self.mlp_multiplier:
             action_safe = self.actor_safe.act(obs, eval=True)
-            safe_Qc, _ = torch.max(self.constraint_critic(obs, action_safe), dim=1)
-            lams = self.multiplier(obs, action)
+            with torch.no_grad():
+                safe_Qc, _ = torch.max(self.constraint_critic(obs, action_safe), dim=1)
+            lams = self.multiplier(obs, safe_Qc)
             assert lams.shape == penalty.shape
             lams_safe = torch.mul(safe_Qc<=0, lams)
             lams_unsafe = torch.mul(safe_Qc>0, lams)
             
             '''Special lam loss
             For safe states, learn their lam: 0 or finite vlaues
-            For unsafe states, want their lams to be close to 19, a large penalty
-                why 19.0: because the upperbound of lams is 20, to avoid grad vanishing
+            For unsafe states, want their lams to be close to ub, a large penalty
+                why (ub-\epsilon)): because the upperbound of lams is ub, to avoid grad vanishing
             '''
-            lam_loss = -0.2 * torch.mean(torch.mul(lams_safe, penalty.detach())) + \
-                       self.criterion(lams_unsafe, (safe_Qc>0) * 19.0)
+            lam_loss = -0.5 * torch.mean(torch.mul(lams_safe, penalty.detach())) + \
+                       self.criterion(
+                           lams_unsafe,
+                           (safe_Qc>0) * (self.mlp_multiplier_cfg.upper_bound - self.lam_epsilon)
+                       )
         else:
             lams = self.lam
             lam_loss = -torch.mean(torch.mul(lams, penalty.detach()))
