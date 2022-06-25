@@ -62,17 +62,18 @@ class MLPMultiplier(Configurable, Module):
     class Config(BaseConfig) :
         hidden_layers = 2
         hidden_dim = 256
+        upper_bound = 50.
 
-    def __init__(self, config, state_dim, max_multiplier=100):
+    def __init__(self, config, state_dim):
         Configurable.__init__(self, config)
         Module.__init__(self)
-        dims = [state_dim+1, *([self.hidden_dim] * self.hidden_layers), 1]
+        dims = [state_dim + 1, *([self.hidden_dim] * self.hidden_layers), 1]
         self.lam = mlp(dims, activation='tanh', output_activation='identity', squeeze_output=True)
-        self.max_lam = max_multiplier
     
-    def forward(self, state, Qc):  # TODO:state input, lambda_max as hyperparameter
-        sa = torch.cat([state, Qc.unsqueeze(-1)], 1)
-        lam = self.max_lam/2 + self.max_lam/2 * torch.tanh(self.lam(sa)/self.max_lam*2)
+    def forward(self, state, Qc):
+        states_aug = torch.cat([state, Qc.unsqueeze(-1)], 1)
+        lam = self.upper_bound/2. * \
+            (1. + torch.tanh( self.lam(states_aug)/self.upper_bound*2 ))
         return lam
 
 
@@ -117,6 +118,8 @@ class SSAC(BasePolicy, Module):
         fixed_multiplier = 15.0
         multiplier_update_interval = 5
 
+        lam_epsilon = 1.0
+
     def __init__(self, config, state_dim, action_dim, con_dim, horizon,
                  optimizer_factory=OPTIMIZER):
         Configurable.__init__(self, config)
@@ -128,7 +131,7 @@ class SSAC(BasePolicy, Module):
         self.violation_cost = 0.0
         # epochs * steps_per_epoch * solver_updates_per_step
         # because we cannot pass the higher config to here, so we put it here and it is super ugly. We admit it.
-        self.updates_per_training = 200 * 360 * 10
+        self.updates_per_training = 50 * 1000 * 10
         self.lam_updates_num = int(self.updates_per_training / self.multiplier_update_interval)
         self.actor_updates_num = int(self.updates_per_training / self.actor_update_interval)
 
@@ -396,11 +399,14 @@ class SSAC(BasePolicy, Module):
             
             '''Special lam loss
             For safe states, learn their lam: 0 or finite vlaues
-            For unsafe states, want their lams to be close to max_multiplier - 1, a large penalty
-                why - 1: because the upperbound of lams is max_multiplier, to avoid grad vanishing
+            For unsafe states, want their lams to be close to ub, a large penalty
+                why (ub-\epsilon)): because the upperbound of lams is ub, to avoid grad vanishing
             '''
             lam_loss = -0.5 * torch.mean(torch.mul(lams_safe, penalty.detach())) + \
-                       self.criterion(lams_unsafe, (safe_Qc>0) * (self.max_multiplier - 1))
+                       self.criterion(
+                           lams_unsafe,
+                           (safe_Qc>0) * (self.mlp_multiplier_cfg.upper_bound - self.lam_epsilon)
+                       )
         else:
             lams = self.lam
             lam_loss = -torch.mean(torch.mul(lams, penalty.detach()))
