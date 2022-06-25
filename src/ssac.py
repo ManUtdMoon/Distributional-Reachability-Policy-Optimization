@@ -61,20 +61,18 @@ class ConstraintCritic(Configurable, Module):
 class MLPMultiplier(Configurable, Module):
     class Config(BaseConfig) :
         hidden_layers = 2
-        hidden_dim = 128
+        hidden_dim = 256
 
-    def __init__(self, config, state_dim):
+    def __init__(self, config, state_dim, max_multiplier=100):
         Configurable.__init__(self, config)
         Module.__init__(self)
-        dims = [1, *([self.hidden_dim] * self.hidden_layers), 1]
+        dims = [state_dim+1, *([self.hidden_dim] * self.hidden_layers), 1]
         self.lam = mlp(dims, activation='tanh', output_activation='identity', squeeze_output=True)
+        self.max_lam = max_multiplier
     
-    def forward(self, state, Qc):
-        # sa = torch.cat([state, Qc], 1)
-        sa = Qc.unsqueeze(-1)
-        # print("state.size()", state.size())
-        # print("Qc.size()", Qc.size())
-        lam = 10.0 + 10.0 * torch.tanh(self.lam(sa))
+    def forward(self, state, Qc):  # TODO:state input, lambda_max as hyperparameter
+        sa = torch.cat([state, Qc.unsqueeze(-1)], 1)
+        lam = self.max_lam/2 + self.max_lam/2 * torch.tanh(self.lam(sa)/self.max_lam*2)
         return lam
 
 
@@ -112,6 +110,7 @@ class SSAC(BasePolicy, Module):
         constraint_threshold = 0.
         constrained_fcn = 'reachability'
         mlp_multiplier = True
+        max_multiplier = 50.0
         penalty_lb = -1.0
         penalty_ub = 100.
         # penalty_offset = 1.0
@@ -184,7 +183,7 @@ class SSAC(BasePolicy, Module):
 
         # -------- multiplier for safety -------- #
         if self.mlp_multiplier:
-            self.multiplier = MLPMultiplier(self.mlp_multiplier_cfg, state_dim)
+            self.multiplier = MLPMultiplier(self.mlp_multiplier_cfg, state_dim, self.max_multiplier)
             self.multiplier_optimizer = optimizer_factory(self.multiplier.parameters(), lr=self.multiplier_lr, weight_decay=1e-4)
             self.multiplier_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.multiplier_optimizer,
@@ -397,11 +396,11 @@ class SSAC(BasePolicy, Module):
             
             '''Special lam loss
             For safe states, learn their lam: 0 or finite vlaues
-            For unsafe states, want their lams to be close to 19, a large penalty
-                why 19.0: because the upperbound of lams is 20, to avoid grad vanishing
+            For unsafe states, want their lams to be close to max_multiplier - 1, a large penalty
+                why - 1: because the upperbound of lams is max_multiplier, to avoid grad vanishing
             '''
-            lam_loss = -0.2 * torch.mean(torch.mul(lams_safe, penalty.detach())) + \
-                       self.criterion(lams_unsafe, (safe_Qc>0) * 19.0)
+            lam_loss = -0.5 * torch.mean(torch.mul(lams_safe, penalty.detach())) + \
+                       self.criterion(lams_unsafe, (safe_Qc>0) * (self.max_multiplier - 1))
         else:
             lams = self.lam
             lam_loss = -torch.mean(torch.mul(lams, penalty.detach()))
