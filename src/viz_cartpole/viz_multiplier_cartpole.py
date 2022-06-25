@@ -95,8 +95,8 @@ class Vizer_set(object):
 
             states = torch.from_numpy(self.obses).float().to(device)
             actions = self.tester.alg.solver.act(states, eval=True)
-            assert self.tester.cfg["alg_cfg"]["sac_cfg"]["mlp_multiplier"]
-            lams = self.tester.alg.solver.multiplier(states)
+            assert self.tester.cfg.alg_cfg.sac_cfg.mlp_multiplier
+            lams = self.tester.alg.solver.multiplier(states, actions)
 
             flatten_lams = lams.cpu().numpy()
 
