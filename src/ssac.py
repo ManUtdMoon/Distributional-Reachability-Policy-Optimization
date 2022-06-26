@@ -186,7 +186,7 @@ class SSAC(BasePolicy, Module):
 
         # -------- multiplier for safety -------- #
         if self.mlp_multiplier:
-            self.multiplier = MLPMultiplier(self.mlp_multiplier_cfg, state_dim, self.max_multiplier)
+            self.multiplier = MLPMultiplier(self.mlp_multiplier_cfg, state_dim)
             self.multiplier_optimizer = optimizer_factory(self.multiplier.parameters(), lr=self.multiplier_lr, weight_decay=1e-4)
             self.multiplier_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.multiplier_optimizer,

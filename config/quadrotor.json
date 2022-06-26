@@ -3,18 +3,20 @@
     "alg_cfg": {
       "sac_cfg": {
         "target_entropy": -2.0,
-        "constraint_threshold": -0.1,
+        "constraint_threshold": -0.4,
         "mlp_multiplier": true,
         "penalty_lb": -1.0,
         "penalty_ub": 100.0,
-        "max_multiplier":50.0
+        "mlp_multiplier_cfg": {
+          "upper_bound": 50.0
+        }
       },
       "steps_per_epoch": 360,
       "model_update_period": 90,
       "model_initial_steps": 2500,
       "model_steps": 1000,
       "buffer_min": 3600,
-      "buffer_max": 750000,
+      "buffer_max": 500000,
       "reward_scale": 1.0,
       "alive_bonus": 2.0
     },

@@ -317,10 +317,18 @@ class SMBPO(Configurable, Module):
                         lambda s, a: self.solver.constraint_critic(s, a),
                         [states, actions]
                     )
+                    a_safe = batch_map(
+                        lambda s: self.solver.actor_safe.act(s, eval=True).detach(),
+                        [states]
+                    )
+                    safe_qcs = batch_map(
+                        lambda s, a: torch.max(self.solver.constraint_critic(s, a), dim=-1)[0],
+                        [states, a_safe]
+                    )
                     if self.sac_cfg.mlp_multiplier:
                         lams = batch_map(
-                            lambda s, a: self.solver.multiplier(s, a),
-                            [states, actions]
+                            lambda s, qc: self.solver.multiplier(s, qc),
+                            [states, safe_qcs]
                         )
                         mean_lam = lams.mean()
 
