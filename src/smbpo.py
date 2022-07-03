@@ -40,7 +40,7 @@ class SMBPO(Configurable, Module):
         constraint_scale = 10.
         constraint_offset = 0.
 
-    def __init__(self, config, env_factory, data):
+    def __init__(self, config, env_factory, data, epochs):
         Configurable.__init__(self, config)
         Module.__init__(self)
         self.data = data
@@ -60,8 +60,11 @@ class SMBPO(Configurable, Module):
         self.check_violation = lambda states: torchify(self.real_env.check_violation(states.cpu().numpy()))
         self.get_constraint_value = lambda states: torchify(self.real_env.get_constraint_values(states.cpu().numpy()))
 
-        self.solver = SSAC(self.sac_cfg, self.state_dim, self.action_dim, self.con_dim, self.horizon)
         self.model_ensemble = BatchedGaussianEnsemble(self.model_cfg, self.state_dim, self.action_dim)
+        self.solver = SSAC(self.sac_cfg, self.state_dim, self.action_dim, self.con_dim, 
+                           self.horizon, epochs, self.steps_per_epoch, self.solver_updates_per_step,
+                           self.constraint_scale, env_factory,
+                           self.model_ensemble)
 
         self.replay_buffer = self._create_buffer(self.buffer_max)
         self.virt_buffer = self._create_buffer(self.buffer_max)
@@ -110,13 +113,15 @@ class SMBPO(Configurable, Module):
             next_state, reward, done, info = self.real_env.step(action)
             violation = info['violation']
             constraint_value = torch.tensor(info['constraint_value'], dtype=torch.float)
-            assert done == self.check_done(next_state.unsqueeze(0))[0], print(done, self.check_done(next_state.unsqueeze(0))[0], next_state)
-            assert violation == self.check_violation(next_state.unsqueeze(0))[0]
+            assert done == self.check_done(next_state.unsqueeze(0))[0], \
+                print(done, self.check_done(next_state.unsqueeze(0))[0], next_state)
+            assert violation == self.check_violation(next_state.unsqueeze(0))[0], \
+                print(violation, self.check_violation(next_state.unsqueeze(0))[0], next_state)
             # print('constraint_value', constraint_value)
             # print('get_constraint_value', self.get_constraint_value(next_state.unsqueeze(0)).cpu())
             # print(constraint_value.numpy() == self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
-            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(next_state.unsqueeze(0)).cpu(), atol=1e-05)), \
-            print(constraint_value.numpy() - self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
+            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(state.unsqueeze(0)).cpu(), atol=1e-05)), \
+                print(constraint_value.numpy() - self.get_constraint_value(state.unsqueeze(0)).cpu().numpy())
             for buffer in [episode, self.replay_buffer]:
                 buffer.append(states=state, actions=action, next_states=next_state,
                               rewards=reward, dones=done, violations=violation,
@@ -258,7 +263,7 @@ class SMBPO(Configurable, Module):
                 next(self.stepper)
             log.message('Initial model training')
             self.update_models(self.model_initial_steps)
-
+        # learn qc*, actor_safe
         log.message(f'Collecting initial virtual data')
         while len(self.virt_buffer) < self.buffer_min:
             self.rollout(self.uniform_policy)
@@ -273,11 +278,12 @@ class SMBPO(Configurable, Module):
     def evaluate_models(self):
         states, actions, next_states = self.replay_buffer.get('states', 'actions', 'next_states')
         state_std = states.std(dim=0)
+        state_std[state_std<1e-7] = 1.0
         with torch.no_grad():
             predicted_states = batch_map(lambda s, a: self.model_ensemble.means(s, a)[0],
                                          [states, actions], cat_dim=1)
         for i in range(self.model_cfg.ensemble_size):
-            errors = torch.norm((predicted_states[i] - next_states) / (state_std + 1e-4), dim=1)
+            errors = torch.norm((predicted_states[i] - next_states) / (state_std + 1e-7), dim=1)
             log.message(f'Model {i+1} error deciles: {deciles(errors)}')
 
     def log_statistics(self):

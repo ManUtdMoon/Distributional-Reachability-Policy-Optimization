@@ -1,4 +1,8 @@
 from pathlib import Path
+import sys
+
+PROJ_DIR = Path.cwd().parent.parent
+sys.path.append(str(PROJ_DIR))
 
 import matplotlib
 matplotlib.use('Agg')
@@ -170,6 +174,5 @@ def main():
 
 if __name__ == '__main__':
     # Usage: in the command line, input the followings
-    # $ export PYTHONPATH=$PYTHONPATH:/your/path/to/Safe_MBRL
     # $ python viz_multiplier_cartpole.py --run-dir <log_dir> --set env_name cartpole-move --epoch <epoch_id, can be more than 1>
     main()

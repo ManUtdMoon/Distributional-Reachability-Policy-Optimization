@@ -1,7 +1,6 @@
 import math
 from copy import deepcopy
 from pathlib import Path
-from urllib.robotparser import RobotFileParser
 
 import numpy as np
 
@@ -57,20 +56,27 @@ class QuadrotorWrapperEnv(Wrapper):
         con_dim = [cons_cfg.active_dims] if isinstance(cons_cfg.active_dims, int) \
             else cons_cfg.active_dims
         self.con_dim = len(con_dim) * 2  # lb & ub
+        self.info = None
     
     def step(self, action: np.array):
-        next_obs, rew, done, info = super().step(action)
         new_info = dict(
-            constraint_value=info['constraint_values'],
+            constraint_value=self.info['constraint_values'],
+        )
+        assert np.all(np.allclose(new_info['constraint_value'], self.constraints.get_value(self.state), atol=1e-6)), \
+            print(new_info['constraint_value'], self.constraints.get_value(self.state))
+        next_obs, rew, done, info = super().step(action)
+        new_info.update(dict(
             violation=bool(info['constraint_violation']),
             **info
-        )
-        assert np.all(info['constraint_values'] == self.get_constraint_values(next_obs)), \
-            print(info['constraint_values'], self.constraints.get_value(next_obs))
+        ))
+        self.state = next_obs
+        self.info = new_info  # including: h(s) not h(s')
         return next_obs, rew, done, new_info
     
     def reset(self):
-        state = super().reset()
+        state, info = super().reset()
+        self.state = state
+        self.info = info
         if self._id:
             print(self.env._get_observation())
         # if self._id:
@@ -82,21 +88,22 @@ class QuadrotorWrapperEnv(Wrapper):
         '''Compute whether the states are out of bound
 
         params:
-            states shape: (n, dim_s) or (dim_s)
+            states shape: (*, dim_s) where * can be any number of dimensions incl. none
         return:
-            dones: shape (n,)
+            dones: shape (*,)
         '''
         if len(states.shape) == 1:
             states = states[np.newaxis, ...]
-        assert len(states.shape) == 2
+        assert len(states.shape) >= 2
+        batch_size = states.shape[:-1]
 
         x_threshold = self.env.x_threshold
         z_threshold = self.env.z_threshold
         theta_threshold_radians = 85 * math.pi / 180
 
-        x = states[:, 0]
-        z = states[:, 2]
-        theta = states[:, 4]
+        x = states[..., 0]
+        z = states[..., 2]
+        theta = states[..., 4]
 
         done = (x < -x_threshold) +\
                (x > x_threshold) +\
@@ -105,25 +112,25 @@ class QuadrotorWrapperEnv(Wrapper):
                (theta < -theta_threshold_radians) +\
                (theta > theta_threshold_radians)
         
-        assert len(done.shape) == 1
+        assert done.shape == batch_size
         return done
 
     def check_violation(self, states: np.array):
         '''Compute whether the constraints are violated
 
         params:
-            states shape: (n, dim_s) or (dim_s)
+            states shape: (*, dim_s)
         return:
-            violations: shape (n,)
+            violations: shape (*,)
         '''
         if len(states.shape) == 1:
             states = states[np.newaxis, ...]
-        assert len(states.shape) == 2
+        assert len(states.shape) >= 2
 
         z_ub = 1.5
         z_lb = 0.5
 
-        z = states[:, 2]
+        z = states[..., 2]
         
         # method 1: compute directly
         violations = np.logical_or(
@@ -148,7 +155,7 @@ class QuadrotorWrapperEnv(Wrapper):
         '''
         if len(states.shape) == 1:
             states = states[np.newaxis, ...]
-        assert len(states.shape) == 2
+        assert len(states.shape) >= 2
 
         return np.squeeze(self.constraints.get_value(states))
 
@@ -157,16 +164,16 @@ if __name__ == '__main__':
     env = QuadrotorWrapperEnv(
         id=2,
     )
-    np.set_printoptions(precision=3, suppress=True)
+    np.set_printoptions(precision=5, suppress=True)
     s = env.reset()
     print(s)
     for i in range(100):
         act = env.action_space.sample()
         s_p, r, done, info = env.step(act)
         print(act, s_p, r, done, info)
-        print(env.check_done(np.tile(s_p, [2,1])))
-        print(env.check_violation(np.tile(s_p, [2,1])))
-        print(env.get_constraint_values(s_p))
+        print(env.check_done(np.tile(s_p, [3, 2, 1])))
+        print(env.check_violation(np.tile(s_p, [3, 2, 1])))
+        print(env.get_constraint_values(np.tile(s_p, [3, 2, 1])))
         print(f"--------------step {i}---------------")
 
         if done:

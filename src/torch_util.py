@@ -173,7 +173,8 @@ KNOWN_ACTIVATIONS = {
     'softplus': nn.Softplus,
     'tanh': nn.Tanh,
     'identity':nn.Identity,
-    'gelu':nn.GELU
+    'gelu':nn.GELU,
+    'swish': nn.SiLU
 }
 
 def _process_activation(activation):

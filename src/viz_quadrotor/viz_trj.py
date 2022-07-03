@@ -1,4 +1,8 @@
 from pathlib import Path
+import sys
+
+PROJ_DIR = Path.cwd().parent.parent
+sys.path.append(str(PROJ_DIR))
 
 import matplotlib
 matplotlib.use('Agg')

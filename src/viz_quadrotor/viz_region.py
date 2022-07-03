@@ -1,4 +1,8 @@
 from pathlib import Path
+import sys
+
+PROJ_DIR = Path.cwd().parent.parent
+sys.path.append(str(PROJ_DIR))
 
 import matplotlib
 matplotlib.use('Agg')
@@ -18,6 +22,7 @@ from src.env.quadrotor.quadrotor import config_eval
 
 
 ROOT_DIR = Path(ROOT_DIR)
+assert str(ROOT_DIR) == str(PROJ_DIR)
 assert ROOT_DIR.is_dir(), ROOT_DIR
 LOGS_DIR = ROOT_DIR / 'logs' / 'quadrotor'
 
@@ -330,6 +335,5 @@ def main():
 
 if __name__ == '__main__':
     # Usage: in the command line, input the followings
-    # $ export PYTHONPATH=$PYTHONPATH:/your/path/to/Safe_MBRL
     # $ python viz_region.py --run-dir <log_dir> --set env_name quadrotor --epoch <epoch_id, can be more than 1>
     main()

@@ -101,7 +101,7 @@ class Constraint:
         """
         if len(states.shape) == 1:
             states = states[np.newaxis, ...]
-        assert len(states.shape) == 2
+        assert len(states.shape) >= 2
 
         return self.sym_func(states)
 
@@ -121,7 +121,7 @@ class Constraint:
         """
         if len(states.shape) == 1:
             states = states[np.newaxis, ...]
-        assert len(states.shape) == 2
+        assert len(states.shape) >= 2
 
         if c_value is None:
             c_value = self.get_value(states)
@@ -143,7 +143,7 @@ class Constraint:
         """
         if len(states.shape) == 1:
             states = states[np.newaxis, ...]
-        assert len(states.shape) == 2
+        assert len(states.shape) >= 2
 
         if not hasattr(self, "tolerance") or self.tolerance is None:
             assert 0
@@ -195,10 +195,10 @@ class LinearConstraint(Constraint):
         active_dim: (a,)
         con_dim: (c,); 
         A: (c, a), b: (c,)
-        x: (n, d)
+        x: (*, d)
         constraint_filter: (a, d)
 
-        therefore, x @ filter.T @ A.T = (n,d)@(d,a)@(a,c) = (n,c)
+        therefore, x @ filter.T @ A.T = (*,d)@(d,a)@(a,c) = (*,c)
         """
         self.sym_func = lambda x: \
             x @ self.constraint_filter.transpose() @ self.A.transpose() - self.b

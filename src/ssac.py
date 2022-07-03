@@ -9,7 +9,7 @@ from .config import BaseConfig, Configurable, Optional
 from .defaults import ACTOR_LR, OPTIMIZER
 from .log import default_log as log
 from .policy import BasePolicy, SquashedGaussianPolicy
-from .torch_util import device, Module, mlp, update_ema, freeze_module
+from .torch_util import device, Module, mlp, update_ema, freeze_module, torchify
 from .util import pythonic_mean
 
 
@@ -28,7 +28,7 @@ class CriticEnsemble(Configurable, Module):
         ])
 
     def all(self, state, action):
-        sa = torch.cat([state, action], 1)
+        sa = torch.cat([state, action], -1)
         return [q(sa) for q in self.qs]
 
     def min(self, state, action):
@@ -38,7 +38,7 @@ class CriticEnsemble(Configurable, Module):
         return pythonic_mean(self.all(state, action))
 
     def random_choice(self, state, action):
-        sa = torch.cat([state, action], 1)
+        sa = torch.cat([state, action], -1)
         return random.choice(self.qs)(sa)
 
 
@@ -54,7 +54,7 @@ class ConstraintCritic(Configurable, Module):
         self.qc = mlp(dims, output_activation=output_activation, squeeze_output=True)
     
     def forward(self, state, action):
-        sa = torch.cat([state, action], 1)
+        sa = torch.cat([state, action], -1)
         return self.qc(sa)
 
 
@@ -71,7 +71,7 @@ class MLPMultiplier(Configurable, Module):
         self.lam = mlp(dims, activation='tanh', output_activation='identity', squeeze_output=True)
     
     def forward(self, state, Qc):
-        states_aug = torch.cat([state, Qc.unsqueeze(-1)], 1)
+        states_aug = torch.cat([state, Qc.unsqueeze(-1)], -1)
         lam = self.upper_bound/2. * \
             (1. + torch.tanh( self.lam(states_aug)/self.upper_bound*2 ))
         return lam
@@ -119,8 +119,11 @@ class SSAC(BasePolicy, Module):
         multiplier_update_interval = 5
 
         lam_epsilon = 1.0
+        qc_under_uncertainty = False
 
-    def __init__(self, config, state_dim, action_dim, con_dim, horizon,
+    def __init__(self, config, state_dim, action_dim, con_dim, 
+                 horizon, epochs, steps_per_epoch, solver_updates_per_step,
+                 constraint_scale, env_factory, model_ensemble,
                  optimizer_factory=OPTIMIZER):
         Configurable.__init__(self, config)
         Module.__init__(self)
@@ -129,11 +132,18 @@ class SSAC(BasePolicy, Module):
         self.con_dim = con_dim
         self.horizon = horizon
         self.violation_cost = 0.0
-        # epochs * steps_per_epoch * solver_updates_per_step
-        # because we cannot pass the higher config to here, so we put it here and it is super ugly. We admit it.
-        self.updates_per_training = 50 * 1000 * 10
+        self.updates_per_training = epochs * steps_per_epoch * solver_updates_per_step
         self.lam_updates_num = int(self.updates_per_training / self.multiplier_update_interval)
         self.actor_updates_num = int(self.updates_per_training / self.actor_update_interval)
+
+        # -------- get env, just to use the get_constraint_value -------- #
+        self.env = env_factory()
+        self.check_done = lambda states: torchify(self.env.check_done(states.cpu().numpy()))
+        self.check_violation = lambda states: torchify(self.env.check_violation(states.cpu().numpy()))
+        self.get_constraint_value = lambda states: \
+            torchify(self.env.get_constraint_values(states.cpu().numpy()) * constraint_scale)
+
+        self.model_ensemble = model_ensemble
 
         # -------- actor & critic (incl. constraint) -------- #
         self.actor = SquashedGaussianPolicy(mlp(
@@ -256,7 +266,7 @@ class SSAC(BasePolicy, Module):
         target = self.compute_target(next_obs, reward, done, violation)
         return self.critic_loss_given_target(obs, action, target)
     
-    def compute_cons_target(self, next_obs, done, violation, constraint_value):
+    def compute_cons_target(self, obs, action, next_obs, done, violation, constraint_value):
         with torch.no_grad():
             if self.constrained_fcn == 'cost':
                 distr = self.actor.distr(next_obs)
@@ -264,13 +274,80 @@ class SSAC(BasePolicy, Module):
                 next_qc_value = self.constraint_critic_target(next_obs, next_action)
                 qc = violation.float() + self.discount * (1. - done.float()) * next_qc_value
             elif self.constrained_fcn == 'reachability':
-                distr = self.actor_safe.distr(next_obs)
-                next_action = distr.sample()
-                next_qc_value = self.constraint_critic_target(next_obs, next_action)
-                qc_nonterminal = (1. - self.discount) * constraint_value.float() + self.discount * torch.maximum(constraint_value.float(), next_qc_value)
-                dones = done.tile((self.con_dim, 1)).t().float()
-                qc = qc_nonterminal * (1 - dones.float()) + constraint_value * dones.float()
-                assert qc.shape == qc_nonterminal.shape
+                """get targetQc with s, a, s' under uncertainty
+                w/o uncertainty:
+                    qc_target = done * h(s)
+                                (1 - done) * { (1-\gamma) * h(s) 
+                                              + \gamma * max[h(s), qc(s')] ) }
+                w/ uncertainty:
+                    We won't use the s' in the buffer because it is deterministic.
+                    However, we need to model the uncertainty in current model ensembles.
+                    Hence, we need rollout a samples distribution with ensembles and we 
+                    denote them as {s'[i]}_{i=1~model_ensemble.ensemble_size}
+                    a = \pi(s)
+                    s'[i] = f(s, a)
+                    qc'[i] = h(s') if s' done else qc(s'[i])
+                    qc' = max_i qc'[i]
+
+                    We need to consider the following cases:
+                               s       s'
+                    case 1   done      /
+                    case 2   ~done    done
+                    case 3   ~done    ~done
+                    
+                    case 1:
+                        qc_target = h(s)
+                    case 2 & 3:
+                        qc_target = max{h(s), qc'}
+                """
+                if self.qc_under_uncertainty:
+                    # we denote elite_batch_sth. as en_ba_sth. for short
+                    # ----- start: robust Qc: choose the largest Qc ----- #
+                    # en_ba_next_obs, _ = self.model_ensemble.elite_samples(obs, action)
+                    # en_ba_done = self.check_done(en_ba_next_obs)  # (E, B)
+                    # en_ba_distr = self.actor_safe.distr(en_ba_next_obs)
+                    # en_ba_next_act = en_ba_distr.sample()  # (E, B, d_a)
+                    # en_ba_next_qc = self.constraint_critic_target(
+                    #     en_ba_next_obs, en_ba_next_act
+                    # )  # (E, B, con_dim)
+                    
+                    # en_ba_con_value = constraint_value.repeat(self.model_ensemble.num_elites, 1, 1)
+                    # en_ba_qc_nonterminal = (1 - self.discount) * constraint_value +\
+                    #                             self.discount * torch.maximum(constraint_value, en_ba_next_qc)
+
+                    # en_ba_dones = en_ba_done.tile((self.con_dim, 1, 1)).permute(1, 2, 0)  # (E, B, con_dim)
+                    # assert en_ba_qc_nonterminal.shape == en_ba_con_value.shape == en_ba_dones.shape ==\
+                    #     (self.model_ensemble.num_elites, self.batch_size, self.con_dim)
+
+                    # en_ba_qc = torch.where(en_ba_dones, en_ba_con_value, en_ba_qc_nonterminal)  # (E, B, con_dim)
+                    # qc = torch.topk(en_ba_qc, k=2, dim=0)[0][-1]  # (B, con_dim)
+                    # assert qc.shape == (self.batch_size, self.con_dim)
+                    # ----- end ----- #
+                    
+                    # ----- start: robust Qc: select a model randomly----- #
+                    next_obs, _ = self.model_ensemble.sample(obs, action)
+                    ba_done = self.check_done(next_obs)  # (B)
+                    ba_distr = self.actor_safe.distr(next_obs)
+                    ba_next_act = ba_distr.sample()  # (B, d_a)
+                    qc_next = self.constraint_critic_target(
+                        next_obs, ba_next_act
+                    )  # (B, con_dim)
+                    dones = ba_done.tile((self.con_dim, 1)).t()
+                    qc_nonterminal = (1. - self.discount) * constraint_value +\
+                                           self.discount * torch.maximum(constraint_value, qc_next)
+                    qc = torch.where(dones, constraint_value, qc_nonterminal)
+                    assert qc_next.shape == dones.shape == constraint_value.shape, \
+                        print(f"qc: {qc_next.shape}, dones: {dones.shape}, cons: {constraint_value.shape}")
+                    # ----- end ----- #
+                else:
+                    distr = self.actor_safe.distr(next_obs)
+                    next_action = distr.sample()
+                    next_qc_value = self.constraint_critic_target(next_obs, next_action)
+                    qc_nonterminal = (1. - self.discount) * constraint_value + \
+                                           self.discount * torch.maximum(constraint_value, next_qc_value)
+                    dones = done.tile((self.con_dim, 1)).t().float()
+                    qc = qc_nonterminal * (1 - dones.float()) + constraint_value * dones.float()
+                    assert qc.shape == qc_nonterminal.shape
             else:
                 raise NotImplementedError
             return qc
@@ -280,7 +357,7 @@ class SSAC(BasePolicy, Module):
         return self.criterion(qcs, target)
 
     def constraint_critic_loss(self, obs, action, next_obs, reward, done, violation, constraint_value):
-        target = self.compute_cons_target(next_obs, done, violation, constraint_value)
+        target = self.compute_cons_target(obs, action, next_obs, done, violation, constraint_value)
         return self.cons_critic_loss_given_target(obs, action, target)
 
     def update_critic(self, *critic_loss_args):

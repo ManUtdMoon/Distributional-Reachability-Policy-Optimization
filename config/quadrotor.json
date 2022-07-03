@@ -13,10 +13,10 @@
       },
       "steps_per_epoch": 360,
       "model_update_period": 90,
-      "model_initial_steps": 2500,
+      "model_initial_steps": 1000,
       "model_steps": 1000,
-      "buffer_min": 3600,
-      "buffer_max": 500000,
+      "buffer_min": 1800,
+      "buffer_max": 360000,
       "reward_scale": 1.0,
       "alive_bonus": 2.0
     },

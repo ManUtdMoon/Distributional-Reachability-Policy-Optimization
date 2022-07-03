@@ -3,6 +3,10 @@ import os
 import json
 import datetime
 from pathlib import Path
+import sys
+
+PROJ_DIR = Path.cwd().parent
+sys.path.append(str(PROJ_DIR))
 
 import numpy as np
 from pyrsistent import v
@@ -130,7 +134,7 @@ class Tester(object):
         self.test_log_dir = test_log_dir
 
         self.data = CheckpointableData()
-        self.alg = SMBPO(cfg.alg_cfg, env_factory, self.data)
+        self.alg = SMBPO(cfg.alg_cfg, env_factory, self.data, cfg.epochs)
         self.checkpointer = Checkpointer(self.alg, log.dir.parent, 'ckpt_{}.pt')
         self.data_checkpointer = Checkpointer(self.data, log.dir.parent, 'data.pt')
         self.load_model(epoch_id)
@@ -206,6 +210,5 @@ def main():
 
 if __name__ == '__main__':
     # Usage: in the command line, input the followings
-    # $ export PYTHONPATH=$PYTHONPATH:/your/path/to/Safe_MBRL
     # $ python tester.py --run-dir <log_dir> --set env_name quadrotor --epoch <epoch_id>
     main()
