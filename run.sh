@@ -3,4 +3,4 @@
 PARENT_DIR=$(cd $(dirname $0);cd ..; pwd)
 export PYTHONPATH=$PYTHONPATH:$PARENT_DIR
 
-python main.py -c config/cartpole-move.json  # quadrotor cartpole-move
+python main.py -c config/quadrotor.json  # quadrotor cartpole-move

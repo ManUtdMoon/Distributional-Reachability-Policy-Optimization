@@ -3,7 +3,7 @@
     "alg_cfg": {
       "sac_cfg": {
         "target_entropy": -2.0,
-        "constraint_threshold": -0.1,
+        "constraint_threshold": -0.5,
         "mlp_multiplier": true,
         "penalty_lb": -1.0,
         "penalty_ub": 100.0,
@@ -18,7 +18,9 @@
       "buffer_min": 3600,
       "buffer_max": 500000,
       "reward_scale": 1.0,
-      "alive_bonus": 2.0
+      "alive_bonus": 2.0,
+      "safe_shield": true,
+      "safe_shield_threshold": -0.2
     },
     "epochs": 200
   }

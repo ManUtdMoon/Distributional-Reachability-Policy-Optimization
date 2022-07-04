@@ -20,7 +20,7 @@ SAVE_PERIOD = 10
 class Config(BaseConfig):
     env_name = Require(str)
     env_cfg = {}
-    seed = 10
+    seed = 42
     epochs = 600
     alg_cfg = SMBPO.Config()
 
@@ -57,7 +57,7 @@ def main(cfg):
         alg.epoch()
         eval_tabular_log.row(alg.evaluate())
 
-        if alg.epochs_completed % SAVE_PERIOD == 0:
+        if alg.epochs_completed % SAVE_PERIOD == 0 or alg.epochs_completed < 10:
             checkpointer.save(alg.epochs_completed)
             data_checkpointer.save()
 
