@@ -20,5 +20,5 @@
       "reward_scale": 1.0,
       "alive_bonus": 2.0
     },
-    "epochs": 200
+    "epochs": 100
   }
