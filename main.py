@@ -57,7 +57,7 @@ def main(cfg):
         alg.epoch()
         eval_tabular_log.row(alg.evaluate())
 
-        if alg.epochs_completed % SAVE_PERIOD == 0:
+        if alg.epochs_completed % SAVE_PERIOD == 0 or alg.epochs_completed < 10:
             checkpointer.save(alg.epochs_completed)
             data_checkpointer.save()
 

@@ -39,6 +39,8 @@ class SMBPO(Configurable, Module):
         mode = 'train'
         constraint_scale = 10.
         constraint_offset = 0.
+        safe_shield = True
+        safe_shield_threshold = -0.1
 
     def __init__(self, config, env_factory, data, epochs):
         Configurable.__init__(self, config)
@@ -85,6 +87,14 @@ class SMBPO(Configurable, Module):
     def actor(self):
         return self.solver.actor
 
+    @property
+    def constraint_critic(self):
+        return self.solver.constraint_critic
+
+    @property
+    def actor_safe(self):
+        return self.solver.actor_safe
+
     def _create_buffer(self, capacity):
         kwargs = {'con_dim': self.con_dim}
         buffer = ConstraintSafetySampleBuffer(self.state_dim, self.action_dim, capacity, **kwargs)
@@ -104,12 +114,36 @@ class SMBPO(Configurable, Module):
             t = self.steps_sampled.item()
             if t >= self.buffer_min:
                 policy = self.actor
+                policy_safe = self.actor_safe
+                constraint_critic= self.constraint_critic
                 if t % self.model_update_period == 0:
                     self.update_models(self.model_steps)
                 self.rollout_and_update()
+                action = policy.act1(state, eval=False)
+
+                # -------- safety shield ----------- #
+                if self.safe_shield:
+                    qc = torch.max(constraint_critic(state.unsqueeze(0), action.unsqueeze(0)))
+                    if qc > self.safe_shield_threshold:
+                        action = policy_safe.act1(state, eval=True)
+                    
+                    # search for safe action if actor_safe is not safe, but maybe useless
+                    # qc_safe = torch.max(constraint_critic(state.unsqueeze(0), action.unsqueeze(0)))
+                    # if qc_safe > self.safe_shield_threshold:
+                    #     for _ in range(100):
+                    #         action_random = policy_safe.act1(state, eval=False)
+                    #         qc_random = torch.max(constraint_critic(state.unsqueeze(0), action_random.unsqueeze(0)))
+                    #         if qc_random <= self.safe_shield_threshold:
+                    #             print("find safe action!!!!!!!!")
+                    #             action = action_random
+                    #             break
+                    #         if _ == 99:
+                    #             print("failed to find safe action!!!!!!!!")
+                # -------- safety shield end -------- #
+
             else:
                 policy = self.uniform_policy
-            action = policy.act1(state, eval=False)
+                action = policy.act1(state, eval=False)
             next_state, reward, done, info = self.real_env.step(action)
             violation = info['violation']
             constraint_value = torch.tensor(info['constraint_value'], dtype=torch.float)

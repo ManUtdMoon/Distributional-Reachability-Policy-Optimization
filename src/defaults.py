@@ -7,4 +7,4 @@ ACTOR_LR = 1e-4
 CRITIC_LR = 1e-3
 
 # ROOT_DIR = None    # set a path (directory) where experiments should be saved
-ROOT_DIR = '/home/moon/Desktop/Safe_MBRL'
+ROOT_DIR = '/home/zouwj20/git/Safe_MBRL'
