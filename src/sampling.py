@@ -122,7 +122,7 @@ class SampleBuffer(Module):
         assert set(kwargs.keys()) == set(self.COMPONENT_NAMES)
         i = self._pointer % self.capacity
         for name in self.COMPONENT_NAMES:
-            self._bufs[name][i] = kwargs[name]
+            self._bufs[name][i] = torchify(kwargs[name])
         self._pointer += 1
 
     def extend(self, **kwargs):
@@ -225,7 +225,8 @@ class ConstraintSafetySampleBuffer(SafetySampleBuffer):
     def __init__(self, *args, **kwargs):
         con_dim = kwargs.pop('con_dim')
         super().__init__(*args, **kwargs)
-        self._create_buffer('constraint_values', torch.float, [con_dim])
+        con_val_dim = [] if con_dim == 1 else [con_dim]
+        self._create_buffer('constraint_values', torch.float, con_val_dim)
 
 
 def concat_sample_buffers(buffers):

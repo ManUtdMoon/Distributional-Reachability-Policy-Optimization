@@ -115,7 +115,7 @@ class SMBPO(Configurable, Module):
             if t >= self.buffer_min:
                 policy = self.actor
                 policy_safe = self.actor_safe
-                constraint_critic= self.constraint_critic
+                constraint_critic = self.constraint_critic
                 if t % self.model_update_period == 0:
                     self.update_models(self.model_steps)
                 self.rollout_and_update()
@@ -123,7 +123,7 @@ class SMBPO(Configurable, Module):
 
                 # -------- safety shield ----------- #
                 if self.safe_shield:
-                    qc = torch.max(constraint_critic(state.unsqueeze(0), action.unsqueeze(0)))
+                    qc = self.solver._get_qc(constraint_critic(state.unsqueeze(0), action.unsqueeze(0)))
                     if qc > self.safe_shield_threshold:
                         action = policy_safe.act1(state, eval=True)
                     
@@ -147,10 +147,10 @@ class SMBPO(Configurable, Module):
             next_state, reward, done, info = self.real_env.step(action)
             violation = info['violation']
             constraint_value = torch.tensor(info['constraint_value'], dtype=torch.float)
-            assert done == self.check_done(next_state.unsqueeze(0))[0], \
-                print(done, self.check_done(next_state.unsqueeze(0))[0], next_state)
-            assert violation == self.check_violation(next_state.unsqueeze(0))[0], \
-                print(violation, self.check_violation(next_state.unsqueeze(0))[0], next_state)
+            assert done == self.check_done(next_state.unsqueeze(0)).item(), \
+                print(done, self.check_done(next_state.unsqueeze(0)).item(), next_state)
+            assert violation == self.check_violation(next_state.unsqueeze(0)).item(), \
+                print(violation, self.check_violation(next_state.unsqueeze(0)).item(), next_state)
             # print('constraint_value', constraint_value)
             # print('get_constraint_value', self.get_constraint_value(next_state.unsqueeze(0)).cpu())
             # print(constraint_value.numpy() == self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
@@ -350,6 +350,8 @@ class SMBPO(Configurable, Module):
             if len(states) == 0:
                 mean_q = None
                 mean_qc = None
+                mean_qc_std = None
+                mean_lam = None
             else:
                 with torch.no_grad():
                     qs = batch_map(lambda s, a: self.solver.critic.mean(s, a), [states, actions])
@@ -367,7 +369,7 @@ class SMBPO(Configurable, Module):
                         [states]
                     )
                     safe_qcs = batch_map(
-                        lambda s, a: torch.max(self.solver.constraint_critic(s, a), dim=-1)[0],
+                        lambda s, a: self.solver._get_qc(self.solver.constraint_critic(s, a)),
                         [states, a_safe]
                     )
                     if self.sac_cfg.mlp_multiplier:
@@ -379,7 +381,7 @@ class SMBPO(Configurable, Module):
 
                     mean_q = qs.mean()
                     if self.sac_cfg.constrained_fcn == 'reachability':
-                        qcs, _ = torch.max(qcs, dim=-1)
+                        qcs = self.solver._get_qc(qcs)
                     mean_qc = qcs.mean()
                     if self.sac_cfg.distributional_qc:
                         mean_qc_std = qcs_std.mean()
@@ -396,8 +398,6 @@ class SMBPO(Configurable, Module):
         
         if not self.sac_cfg.mlp_multiplier:
             mean_lam = self.solver.lam.detach().item()
-        log.message(f'Average Lambda: {mean_lam}')
-        self.data.append(f'Average Lambda', mean_lam)
 
         if torch.cuda.is_available():
             log.message(f'GPU memory info: {gpu_mem_info()}')
