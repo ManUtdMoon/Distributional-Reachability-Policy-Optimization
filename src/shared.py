@@ -24,9 +24,10 @@ def get_env(env_name, wrap_torch=True, **kwargs):
         'cartpole-upright': SafeInvertedPendulumEnv,
         'cartpole-move': SafeInvertedPendulumEnv,
         'quadrotor': QuadrotorWrapperEnv,
-        'safetygym-point': SafetyGymWrapper
+        'safetygym-point': SafetyGymWrapper,
+        'safetygym-car': SafetyGymWrapper
     }
-    if env_name != 'quadrotor':
+    if env_name != 'quadrotor' and (not env_name.startswith('safetygym')):
         assert 'id' in kwargs.keys()
         kwargs.pop('id')  # the keyword arg 'mode' is only valid for quadrotor env
 

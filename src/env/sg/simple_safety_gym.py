@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+from collections import OrderedDict
 
 import gym.spaces
 import numpy as np
@@ -49,7 +50,9 @@ class SimpleEngine(Engine):
         return flat_obs
 
     def build_observation_space(self):
-        obs_space_dict = {}
+        obs_space_dict = OrderedDict()
+
+        obs_space_dict['goal_pos'] = gym.spaces.Box(-np.inf, np.inf, (1, 3), dtype=np.float32)
 
         obs_space_dict['accelerometer'] = gym.spaces.Box(-np.inf, np.inf, (2,), dtype=np.float32)
         obs_space_dict['velocimeter'] = gym.spaces.Box(-np.inf, np.inf, (2,), dtype=np.float32)
@@ -58,7 +61,6 @@ class SimpleEngine(Engine):
         if 'doggo.xml' in self.robot_base:
             self.build_extra_sensor_observation_space(obs_space_dict)  # Must call after simplified sensors
 
-        obs_space_dict['goal_pos'] = gym.spaces.Box(-np.inf, np.inf, (1, 3), dtype=np.float32)
         if self.observe_hazards_pos:
             obs_space_dict['hazards_pos'] = gym.spaces.Box(-np.inf, np.inf, (self.hazards_num, 3), dtype=np.float32)
         else:
@@ -67,10 +69,10 @@ class SimpleEngine(Engine):
         self.obs_space_dict = obs_space_dict
         self.obs_flat_size = sum([np.prod(i.shape) for i in self.obs_space_dict.values()])
         self.observation_space = gym.spaces.Box(-np.inf, np.inf, (self.obs_flat_size,), dtype=np.float32)
-        self.observation_layout = {}
+        self.observation_layout = OrderedDict()
 
         offset = 0
-        for k in sorted(self.obs_space_dict.keys()):
+        for k in self.obs_space_dict.keys():
             space = self.obs_space_dict[k]
             size = np.prod(space.shape)
             start, end = offset, offset + size

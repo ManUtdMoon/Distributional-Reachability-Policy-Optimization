@@ -12,21 +12,28 @@ from src.env.sg.config import *
 
 
 class SafetyGymWrapper(Wrapper):
-    def __init__(self, robot_type) -> None:
+    def __init__(self, robot_type, id=None):
         env_cfg_dict = {
             'point': point_goal_config,
             'car': car_goal_config
         }
-        env = SimpleEngine(env_cfg_dict[robot_type])
+        env_cfg = deepcopy(env_cfg_dict[robot_type])
+        if id is None:  # for train env
+            env_cfg['continue_goal'] = False
+        else:  # for eval env
+            env_cfg['continue_goal'] = True
+        env = SimpleEngine(env_cfg)
         super().__init__(env)
 
         self._max_episode_steps = self.num_steps
 
         self.con_dim = 1
         self.observation_space = gym.spaces.Box(
-            -np.inf, np.inf, (self.obs_flat_size + 2,), dtype=np.float32
+            -np.inf, np.inf, (self.obs_flat_size + 1,), dtype=np.float32
         )  # the additional "2" is current constraint h(s) and isException
         self.info = None
+        self.margin_scale = 0.8  # the closer to 1, the harder to done
+        assert 0. < self.margin_scale < 1.
 
     def augment_obs(self, obs):
         '''Augment the obs with a scalar representing the current constraint value.
@@ -37,7 +44,7 @@ class SafetyGymWrapper(Wrapper):
         params:
             obs
         return:
-            obs_aug = (obs, h(s), isException)
+            obs_aug = (obs, h(s))
         '''
         assert len(obs.shape) == 1, print(f"Obs has more than 1 dims, the dim is {obs.shape}")
         
@@ -50,8 +57,7 @@ class SafetyGymWrapper(Wrapper):
         constraint_value = np.max(constraint_values)
         # end: compute hazards constraint values
 
-        isException = float(self.env.done)
-        return np.concatenate([obs, [constraint_value, isException]])
+        return np.concatenate([obs, [constraint_value]])
     
     def step(self, action: np.array):
         new_info = dict(
@@ -60,10 +66,13 @@ class SafetyGymWrapper(Wrapper):
         next_obs, rew, done, info = super().step(action)
         next_state = self.augment_obs(next_obs)
         new_info.update(dict(
-            violation=(next_state[-2] > 0),
+            violation=(next_state[-1] > 0),
             **info
         ))
         self.info = new_info
+
+        if next_state[-1] >= self.margin_scale * self.env.hazards_size:
+            done = True
 
         return next_state, rew, done, new_info
 
@@ -78,17 +87,20 @@ class SafetyGymWrapper(Wrapper):
             constraint_hazards.append(self.env.hazards_size - h_dist)
         
         self.info = dict(
-            constraint_value=state[-2],
+            constraint_value=state[-1],
             constraint_hazards=constraint_hazards
         )
 
         return state
 
     def check_done(self, states: np.array):
-        '''Compute whether exception happens
+        '''Compute whether soft constraint is violated or 
+                           the agent reaches the goal region
 
         params:
             states shape: (*, dim_s) where * can be any number of dimensions incl. none
+                [..., 0] is the exp(-dist) where dist is the distance to goal
+                [..., -1] is the constraint function
         return:
             dones: shape (*,)
         '''
@@ -96,7 +108,9 @@ class SafetyGymWrapper(Wrapper):
             states = states[np.newaxis, ...]
         assert len(states.shape) >= 2
 
-        return (states[..., -1] == 1)
+        return np.logical_or(states[..., -1] >= self.margin_scale * self.env.hazards_size,
+            -np.log(states[..., 0].clip(1.0e-4, 1.0e4)) <= self.env.goal_size
+        )
 
     def check_violation(self, states: np.array):
         '''Compute whether the constraints are violated
@@ -110,7 +124,7 @@ class SafetyGymWrapper(Wrapper):
             states = states[np.newaxis, ...]
         assert len(states.shape) >= 2
 
-        return states[..., -2] > 0
+        return states[..., -1] > 0
 
     def get_constraint_values(self, states):
         '''Compute the constraints values given states
@@ -124,7 +138,7 @@ class SafetyGymWrapper(Wrapper):
             states = states[np.newaxis, ...]
         assert len(states.shape) >= 2
 
-        return states[..., -2]
+        return states[..., -1]
 
 
 if __name__ == '__main__':

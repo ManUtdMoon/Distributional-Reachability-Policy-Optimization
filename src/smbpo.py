@@ -147,8 +147,19 @@ class SMBPO(Configurable, Module):
             next_state, reward, done, info = self.real_env.step(action)
             violation = info['violation']
             constraint_value = torch.tensor(info['constraint_value'], dtype=torch.float)
-            assert done == self.check_done(next_state.unsqueeze(0)).item(), \
-                print(done, self.check_done(next_state.unsqueeze(0)).item(), next_state)
+            computed_done = self.check_done(next_state.unsqueeze(0)).item()
+            info_keys = info.keys()
+            if 'cost_exception' in info_keys:
+                log.message('Exception happens!')
+                computed_done = True
+            elif 'resample_failure' in info_keys:
+                log.message('Resample failure happens!')
+                computed_done = True
+            elif ('goal_met' in info_keys) != computed_done:
+                log.message(f'Computed_done does not equal to goal_met! exp(-d) = {next_state[0]} \
+                    but env thinks done is {"goal_met" in info_keys}')
+                computed_done = ('goal_met' in info_keys)
+            assert done == computed_done, print(done, computed_done, next_state)
             assert violation == self.check_violation(next_state.unsqueeze(0)).item(), \
                 print(violation, self.check_violation(next_state.unsqueeze(0)).item(), next_state)
             # print('constraint_value', constraint_value)
@@ -337,21 +348,24 @@ class SMBPO(Configurable, Module):
         log.message(f'\tReal: {len(self.replay_buffer)}')
         log.message(f'\tVirtual: {len(self.virt_buffer)}')
 
-        real_states, real_actions, real_violations = self.replay_buffer.get('states', 'actions', 'violations')
-        virt_states, virt_violations = self.virt_buffer.get('states', 'violations')
+        real_states, real_actions, real_violations, real_rewards = self.replay_buffer.get('states', 'actions', 'violations', 'rewards')
+        virt_states, virt_violations, virt_rewards = self.virt_buffer.get('states', 'violations', 'rewards')
         virt_actions = self.actor.act(virt_states, eval=True).detach()
         sa_data = {
-            'real (done)': (real_states[real_violations], real_actions[real_violations]),
-            'real (~done)': (real_states[~real_violations], real_actions[~real_violations]),
-            'virtual (done)': (virt_states[virt_violations], virt_actions[virt_violations]),
-            'virtual (~done)': (virt_states[~virt_violations], virt_actions[~virt_violations])
+            'real (done)': (real_states[real_violations], real_actions[real_violations], real_rewards[real_violations]),
+            'real (~done)': (real_states[~real_violations], real_actions[~real_violations], real_rewards[~real_violations]),
+            'virtual (done)': (virt_states[virt_violations], virt_actions[virt_violations], virt_rewards[virt_violations]),
+            'virtual (~done)': (virt_states[~virt_violations], virt_actions[~virt_violations], virt_rewards[~virt_violations])
         }
-        for which, (states, actions) in sa_data.items():
+        for which, (states, actions, rewards) in sa_data.items():
             if len(states) == 0:
                 mean_q = None
                 mean_qc = None
                 mean_qc_std = None
                 mean_lam = None
+                mean_s = None
+                mean_a = None
+                mean_r = None
             else:
                 with torch.no_grad():
                     qs = batch_map(lambda s, a: self.solver.critic.mean(s, a), [states, actions])
@@ -385,6 +399,12 @@ class SMBPO(Configurable, Module):
                     mean_qc = qcs.mean()
                     if self.sac_cfg.distributional_qc:
                         mean_qc_std = qcs_std.mean()
+                    mean_s = torch.mean(states, dim=0)
+                    mean_a = torch.mean(actions, dim=0)
+                    mean_r = torch.mean(rewards, dim=0)
+            # log.message(f'Average s {which}: {mean_s}')
+            # log.message(f'Average a {which}: {mean_a}')
+            # log.message(f'Average r {which}: {mean_r}')
             log.message(f'Average Q {which}: {mean_q}')
             self.data.append(f'Average Q {which}', mean_q)
             log.message(f'Average Qc {which}: {mean_qc}')
