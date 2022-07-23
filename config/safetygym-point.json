@@ -16,15 +16,15 @@
       },
       "steps_per_epoch": 1000,
       "model_update_period": 250,
-      "model_initial_steps": 2500,
+      "model_initial_steps": 5000,
       "model_steps": 1000,
-      "buffer_min": 10000,
+      "buffer_min": 5000,
       "buffer_max": 500000,
-      "reward_scale": 10.0,
+      "reward_scale": 50.0,
       "alive_bonus": 0.0,
       "safe_shield": true,
       "safe_shield_threshold": -0.2,
-      "constraint_scale": 5.0
+      "constraint_scale": 10.0
     },
     "epochs": 100
   }

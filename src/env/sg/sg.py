@@ -151,6 +151,27 @@ class SafetyGymWrapper(Wrapper):
         assert len(states.shape) >= 2
 
         return states[..., 0] <= self.env.goal_size
+    
+    def get_reward(self, states: np.array, actions: np.array, next_states: np.array) -> np.array:
+        '''Compute rewards of (s, a, s')
+        In safety-gym, the rewards is only related to the dist_to_goal,
+        i.e., the 0th of states
+
+        '''
+        if len(states.shape) == 1:
+            states = states[np.newaxis, ...]
+        if len(actions.shape) == 1:
+            actions = actions[np.newaxis, ...]
+        if len(next_states.shape) == 1:
+            next_states = next_states[np.newaxis, ...]
+        
+        assert len(states.shape) >= 2 and (len(states.shape) == len(next_states.shape) == len(actions.shape))
+
+        batch_size = states.shape[:-1]
+        rewards = states[..., 0] - next_states[..., 0]
+        assert rewards.shape == batch_size
+
+        return rewards
 
 
 if __name__ == '__main__':

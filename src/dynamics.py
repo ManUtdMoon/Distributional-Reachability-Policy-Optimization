@@ -172,7 +172,11 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
                 self.optimizer.step()
             
             # get holdout samples; holdout losses; decide the elites
-            holdout_indices = torch.randint(n, [self.holdout_size], device=device)
+            _weights = torch.logical_not(goal_mets).float()
+            assert _weights.shape == (n,)
+            holdout_indices = torch.multinomial(_weights, self.holdout_size, replacement=True)
+            assert holdout_indices.shape == (self.holdout_size,)
+            # holdout_indices = torch.randint(n, [self.holdout_size], device=device)
             holdout_indices = holdout_indices.repeat(self.ensemble_size, 1)
             assert states[holdout_indices].shape == (self.ensemble_size, self.batch_size, self.state_dim)
             mse_losses = self._mse_loss(states[holdout_indices],

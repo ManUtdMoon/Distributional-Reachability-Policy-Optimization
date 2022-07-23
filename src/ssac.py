@@ -121,10 +121,10 @@ class SSAC(BasePolicy, Module):
         deterministic_backup = False
 
         critic_update_multiplier = 1
-        actor_lr = 8e-5
-        actor_lr_end = 4e-5
-        critic_lr = 3e-4
-        critic_lr_end = 8e-5
+        actor_lr = 5e-5
+        actor_lr_end = 8e-6
+        critic_lr = 1e-4
+        critic_lr_end = 3e-5
         multiplier_lr = 3e-4
         multiplier_lr_end = 1e-5
         critic_cfg = CriticEnsemble.Config()

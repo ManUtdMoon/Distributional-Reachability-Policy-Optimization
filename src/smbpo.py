@@ -62,6 +62,9 @@ class SMBPO(Configurable, Module):
         self.check_violation = lambda states: torchify(self.real_env.check_violation(states.cpu().numpy()))
         self.get_constraint_value = lambda states: torchify(self.real_env.get_constraint_values(states.cpu().numpy()))
         self.check_goal_met = lambda states: torchify(self.real_env.check_goal_met(states.cpu().numpy()))
+        self.get_reward = lambda s, a, s_next: torchify(self.real_env.get_reward(
+            s.cpu().numpy(), a.cpu().numpy(), s_next.cpu().numpy()
+        ))
 
         self.model_ensemble = BatchedGaussianEnsemble(self.model_cfg, self.state_dim, self.action_dim)
         self.solver = SSAC(self.sac_cfg, self.state_dim, self.action_dim, self.con_dim, 
@@ -173,6 +176,11 @@ class SMBPO(Configurable, Module):
                 buf_reward = reward * self.reward_scale
             goal_met = ('goal_met' in info_keys)
 
+            computed_reward = self.get_reward(state.unsqueeze(0), action.unsqueeze(0), next_state.unsqueeze(0)).cpu()
+
+            assert torch.isclose(torch.tensor(reward), computed_reward, atol=1e-05) or goal_met, \
+                print(reward - computed_reward.numpy().item(), reward, computed_reward.numpy().item(), goal_met)
+
             # for buffer in [episode, self.replay_buffer]:
             #     buffer.append(states=state, actions=action, next_states=next_state,
             #                   rewards=buf_reward, dones=done or goal_met, violations=violation,
@@ -242,6 +250,11 @@ class SMBPO(Configurable, Module):
             with torch.no_grad():
                 actions = policy.act(states, eval=False)
                 next_states, rewards = self.model_ensemble.sample(states, actions)
+                # Compute rewards manually instead of using the learned ones
+                # computed_rewards = self.get_reward(states, actions, next_states)
+                # if self.reward_scale > 0:
+                #     computed_rewards *= self.reward_scale
+                # assert computed_rewards.shape == rewards.shape  # (batch_size,)
             dones = self.check_done(next_states)
             violations = self.check_violation(next_states)
             constraint_values = self.get_constraint_value(next_states)
