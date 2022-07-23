@@ -26,6 +26,8 @@ point_goal_config = {
 
     'goal_keepout': 0.4,
     'goal_size': 0.3,
+    
+    'reward_goal': 0.0,
 
     '_seed': None
 }

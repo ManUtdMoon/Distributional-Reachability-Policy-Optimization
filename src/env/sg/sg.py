@@ -18,10 +18,10 @@ class SafetyGymWrapper(Wrapper):
             'car': car_goal_config
         }
         env_cfg = deepcopy(env_cfg_dict[robot_type])
-        if id is None:  # for train env
-            env_cfg['continue_goal'] = False
-        else:  # for eval env
-            env_cfg['continue_goal'] = True
+        # if id is None:  # for train env
+        #     env_cfg['continue_goal'] = False
+        # else:  # for eval env
+        #     env_cfg['continue_goal'] = True
         env = SimpleEngine(env_cfg)
         super().__init__(env)
 
@@ -108,9 +108,7 @@ class SafetyGymWrapper(Wrapper):
             states = states[np.newaxis, ...]
         assert len(states.shape) >= 2
 
-        return np.logical_or(states[..., -1] >= self.margin_scale * self.env.hazards_size,
-            -np.log(states[..., 0].clip(1.0e-4, 1.0e4)) <= self.env.goal_size
-        )
+        return states[..., -1] >= self.margin_scale * self.env.hazards_size
 
     def check_violation(self, states: np.array):
         '''Compute whether the constraints are violated
@@ -139,6 +137,20 @@ class SafetyGymWrapper(Wrapper):
         assert len(states.shape) >= 2
 
         return states[..., -1]
+    
+    def check_goal_met(self, states):
+        '''Compute whether the agents reach goal
+
+        params:
+            states shape: (*, dim_s)
+        return:
+            shape (*,) of True/False
+        '''
+        if len(states.shape) == 1:
+            states = states[np.newaxis, ...]
+        assert len(states.shape) >= 2
+
+        return states[..., 0] <= self.env.goal_size
 
 
 if __name__ == '__main__':

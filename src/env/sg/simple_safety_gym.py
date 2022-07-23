@@ -14,7 +14,7 @@ def normalize_obs(pos, robot_pos, robot_mat):
     x, y = vec[:, 0], vec[:, 1]
     z = x + 1j * y
     dist = np.abs(z)
-    dist = np.exp(-dist)
+    # dist = np.exp(-dist)
     angle = np.angle(z)
     return np.stack((dist, np.cos(angle), np.sin(angle)), axis=-1)
 

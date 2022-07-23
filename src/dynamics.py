@@ -152,6 +152,7 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
     def fit(self, buffer, steps=None, epochs=None, progress_bar=False, **kwargs):
         n = len(buffer)
         states, actions, next_states, rewards = buffer.get()[:4]
+        goal_mets = buffer.get()[-1]
         self.state_normalizer.fit(states)
         targets = torch.cat([next_states, rewards.unsqueeze(1)], dim=1)
 
@@ -160,7 +161,10 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
             losses = []
             for _ in (trange if progress_bar else range)(steps):
                 # indices = random_indices(n, size=self.total_batch_size, replace=False)
-                indices = torch.randint(n, [self.total_batch_size], device=device)
+                # indices = torch.randint(n, [self.total_batch_size], device=device)
+                _weights = torch.logical_not(goal_mets).float()
+                assert _weights.shape == (n,)
+                indices = torch.multinomial(_weights, self.total_batch_size, replacement=True)
                 loss = self.compute_loss(states[indices], actions[indices], targets[indices])
                 losses.append(loss.item())
                 self.optimizer.zero_grad()

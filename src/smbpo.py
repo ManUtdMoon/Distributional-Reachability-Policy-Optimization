@@ -8,13 +8,13 @@ from .env.batch import ProductEnv
 from .env.util import env_dims, get_max_episode_steps
 from .log import default_log as log, TabularLog
 from .policy import UniformPolicy
-from .sampling import sample_episodes_batched, SafetySampleBuffer, ConstraintSafetySampleBuffer
+from .sampling import sample_episodes_batched, GoalConstraintSafetyBuffer, ConstraintSafetySampleBuffer
 from .ssac import SSAC
 from .torch_util import Module, DummyModuleWrapper, device, torchify, random_choice, gpu_mem_info, deciles
 from .util import pythonic_mean, batch_map
 
 
-N_EVAL_TRAJ = 10
+N_EVAL_TRAJ = 20
 LOSS_AVERAGE_WINDOW = 10
 
 
@@ -61,6 +61,7 @@ class SMBPO(Configurable, Module):
         self.check_done = lambda states: torchify(self.real_env.check_done(states.cpu().numpy()))
         self.check_violation = lambda states: torchify(self.real_env.check_violation(states.cpu().numpy()))
         self.get_constraint_value = lambda states: torchify(self.real_env.get_constraint_values(states.cpu().numpy()))
+        self.check_goal_met = lambda states: torchify(self.real_env.check_goal_met(states.cpu().numpy()))
 
         self.model_ensemble = BatchedGaussianEnsemble(self.model_cfg, self.state_dim, self.action_dim)
         self.solver = SSAC(self.sac_cfg, self.state_dim, self.action_dim, self.con_dim, 
@@ -97,7 +98,7 @@ class SMBPO(Configurable, Module):
 
     def _create_buffer(self, capacity):
         kwargs = {'con_dim': self.con_dim}
-        buffer = ConstraintSafetySampleBuffer(self.state_dim, self.action_dim, capacity, **kwargs)
+        buffer = GoalConstraintSafetyBuffer(self.state_dim, self.action_dim, capacity, **kwargs)
         buffer.to(device)
         return DummyModuleWrapper(buffer)
 
@@ -155,10 +156,10 @@ class SMBPO(Configurable, Module):
             elif 'resample_failure' in info_keys:
                 log.message('Resample failure happens!')
                 computed_done = True
-            elif ('goal_met' in info_keys) != computed_done:
-                log.message(f'Computed_done does not equal to goal_met! exp(-d) = {next_state[0]} \
-                    but env thinks done is {"goal_met" in info_keys}')
-                computed_done = ('goal_met' in info_keys)
+            # elif ('goal_met' in info_keys) != computed_done:
+            #     log.message(f'Computed_done does not equal to goal_met! exp(-d) = {next_state[0]} \
+            #         but env thinks done is {"goal_met" in info_keys}')
+            #     computed_done = ('goal_met' in info_keys)
             assert done == computed_done, print(done, computed_done, next_state)
             assert violation == self.check_violation(next_state.unsqueeze(0)).item(), \
                 print(violation, self.check_violation(next_state.unsqueeze(0)).item(), next_state)
@@ -167,10 +168,21 @@ class SMBPO(Configurable, Module):
             # print(constraint_value.numpy() == self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
             assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(state.unsqueeze(0)).cpu(), atol=1e-05)), \
                 print(constraint_value.numpy() - self.get_constraint_value(state.unsqueeze(0)).cpu().numpy())
-            for buffer in [episode, self.replay_buffer]:
-                buffer.append(states=state, actions=action, next_states=next_state,
-                              rewards=reward, dones=done, violations=violation,
-                              constraint_values=constraint_value)
+
+            if self.reward_scale != 0:
+                buf_reward = reward * self.reward_scale
+            goal_met = ('goal_met' in info_keys)
+
+            # for buffer in [episode, self.replay_buffer]:
+            #     buffer.append(states=state, actions=action, next_states=next_state,
+            #                   rewards=buf_reward, dones=done or goal_met, violations=violation,
+            #                   constraint_values=constraint_value)
+            episode.append(states=state, actions=action, next_states=next_state,
+                           rewards=reward+float(goal_met), dones=done or goal_met, violations=violation,
+                           constraint_values=constraint_value, goal_mets=goal_met)
+            self.replay_buffer.append(states=state, actions=action, next_states=next_state,
+                                      rewards=buf_reward, dones=done or goal_met, violations=violation,
+                                      constraint_values=constraint_value, goal_mets=goal_met)
             self.steps_sampled += 1
 
             if done or (len(episode) == max_episode_steps):
@@ -233,9 +245,11 @@ class SMBPO(Configurable, Module):
             dones = self.check_done(next_states)
             violations = self.check_violation(next_states)
             constraint_values = self.get_constraint_value(next_states)
+            goal_mets = self.check_goal_met(next_states)
             buffer.extend(states=states, actions=actions, next_states=next_states,
-                          rewards=rewards, dones=dones, violations=violations, constraint_values=constraint_values)
-            continues = ~(dones)
+                          rewards=rewards, dones=(dones | goal_mets), violations=violations,
+                          constraint_values=constraint_values, goal_mets=goal_mets)
+            continues = ~(dones | goal_mets)
             if continues.sum() == 0:
                 break
             states = next_states[continues]
@@ -255,15 +269,14 @@ class SMBPO(Configurable, Module):
         # reward preprocess
         REWARD_INDEX = 3
         assert combined_samples[REWARD_INDEX].ndim == 1
-        if self.reward_scale != 0:
-            combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] * self.reward_scale
+        # if self.reward_scale != 0:
+        #     combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] * self.reward_scale
         if self.alive_bonus != 0:    
             combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] + self.alive_bonus
         CONSTRAINT_VALUE_INDEX = 6
         combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] * self.constraint_scale
         combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] + \
             (combined_samples[CONSTRAINT_VALUE_INDEX]>0).float() * self.constraint_offset
-        
 
         # learning
         critic_loss, constraint_critic_loss = solver.update_critic(*combined_samples)
@@ -404,7 +417,7 @@ class SMBPO(Configurable, Module):
                     mean_r = torch.mean(rewards, dim=0)
             # log.message(f'Average s {which}: {mean_s}')
             # log.message(f'Average a {which}: {mean_a}')
-            # log.message(f'Average r {which}: {mean_r}')
+            log.message(f'Average r {which}: {mean_r}')
             log.message(f'Average Q {which}: {mean_q}')
             self.data.append(f'Average Q {which}', mean_q)
             log.message(f'Average Qc {which}: {mean_qc}')

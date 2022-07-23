@@ -298,7 +298,7 @@ class SSAC(BasePolicy, Module):
         qs = self.critic.all(obs, action)
         return pythonic_mean([self.criterion(q, target) for q in qs])
 
-    def critic_loss(self, obs, action, next_obs, reward, done, violation, constraint_value):
+    def critic_loss(self, obs, action, next_obs, reward, done, violation, constraint_value, goal_mets):
         target = self.compute_target(next_obs, reward, done, violation)
         return self.critic_loss_given_target(obs, action, target)
     
@@ -427,7 +427,7 @@ class SSAC(BasePolicy, Module):
             assert target_bounded is None
             return self.criterion(qcs, target)
 
-    def constraint_critic_loss(self, obs, action, next_obs, reward, done, violation, constraint_value):
+    def constraint_critic_loss(self, obs, action, next_obs, reward, done, violation, constraint_value, goal_mets):
         if self.distributional_qc:
             target, target_bounded = self.compute_cons_target(obs, action, next_obs, done, violation, constraint_value)
         else:
