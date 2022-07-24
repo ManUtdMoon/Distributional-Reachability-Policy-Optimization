@@ -64,7 +64,7 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
         init_max_log_var = 1.0
         log_var_bound_weight = 0.01
         batch_size = 256
-        learning_rate = 1e-4
+        learning_rate = 1e-3
         holdout_size = 256
 
         clip_grad_norm = 5.
