@@ -26,7 +26,7 @@ class SMBPO(Configurable, Module):
         model_steps = 2000
         model_update_period = 250   # how many steps between updating the models
         save_trajectories = False
-        horizon = 10
+        horizon = 5
         alive_bonus = 1.0   # alternative: positive, rather than negative, reinforcement
         buffer_min = 5000
         buffer_max = 10**6
@@ -178,8 +178,8 @@ class SMBPO(Configurable, Module):
 
             computed_reward = self.get_reward(state.unsqueeze(0), action.unsqueeze(0), next_state.unsqueeze(0)).cpu()
 
-            assert torch.isclose(torch.tensor(reward), computed_reward, atol=1e-05) or goal_met, \
-                print(reward - computed_reward.numpy().item(), reward, computed_reward.numpy().item(), goal_met)
+            # assert torch.isclose(torch.tensor(reward), computed_reward, atol=1e-05) or goal_met, \
+            #     print(reward - computed_reward.numpy().item(), reward, computed_reward.numpy().item(), goal_met)
 
             # for buffer in [episode, self.replay_buffer]:
             #     buffer.append(states=state, actions=action, next_states=next_state,
@@ -251,10 +251,10 @@ class SMBPO(Configurable, Module):
                 actions = policy.act(states, eval=False)
                 next_states, rewards = self.model_ensemble.sample(states, actions)
                 # Compute rewards manually instead of using the learned ones
-                # computed_rewards = self.get_reward(states, actions, next_states)
-                # if self.reward_scale > 0:
-                #     computed_rewards *= self.reward_scale
-                # assert computed_rewards.shape == rewards.shape  # (batch_size,)
+                computed_rewards = self.get_reward(states, actions, next_states)
+                if self.reward_scale > 0:
+                    computed_rewards *= self.reward_scale
+                assert computed_rewards.shape == rewards.shape  # (batch_size,)
             dones = self.check_done(next_states)
             violations = self.check_violation(next_states)
             constraint_values = self.get_constraint_value(next_states)

@@ -1,6 +1,6 @@
 <mujoco>
     <size njmax="3000" nconmax="1000"/>
-    <option timestep="0.002"/>
+    <option timestep="0.01"/>
     <default>
         <geom condim="6" density="1" rgba="1 0 0 1"/>
         <joint damping=".001"/>

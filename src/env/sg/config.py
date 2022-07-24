@@ -9,6 +9,8 @@ assert ROOT_DIR.is_dir(), ROOT_DIR
 XML_DIR = ROOT_DIR / 'src' / 'env' / 'sg' / 'xmls'
 
 point_goal_config = {
+    'num_steps': 200,
+
     'robot_base': str(XML_DIR / 'point.xml'),
 
     'task': 'goal',
@@ -34,6 +36,7 @@ point_goal_config = {
 
 car_goal_config = {
     **point_goal_config,
+    'num_steps': 400,
     'robot_base': str(XML_DIR / 'car.xml'),
 }
 

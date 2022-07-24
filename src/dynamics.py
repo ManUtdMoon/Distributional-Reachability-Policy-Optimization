@@ -64,8 +64,10 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
         init_max_log_var = 1.0
         log_var_bound_weight = 0.01
         batch_size = 256
-        learning_rate = 1e-3
+        learning_rate = 1e-4
         holdout_size = 256
+
+        clip_grad_norm = 5.
 
     def __init__(self, config, state_dim, action_dim,
                  device=device, optimizer_factory=defaults.OPTIMIZER):
@@ -169,6 +171,12 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
                 losses.append(loss.item())
                 self.optimizer.zero_grad()
                 loss.backward()
+                # nn.utils.clip_grad_norm_(
+                #     [*self.trunk.parameters(), 
+                #      *self.diff_head.parameters(), 
+                #      *self.log_var_head.parameters()],
+                #     max_norm=self.clip_grad_norm
+                # )
                 self.optimizer.step()
             
             # get holdout samples; holdout losses; decide the elites
