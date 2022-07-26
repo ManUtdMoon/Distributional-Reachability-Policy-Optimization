@@ -222,6 +222,17 @@ class SMBPO(Configurable, Module):
                 episode = self._create_buffer(max_episode_steps)
                 state = self.real_env.reset()
             else:
+                if self.steps_sampled % max_episode_steps == 0:
+                    self._log_tabular({
+                        'episodes sampled': self.episodes_sampled.item(),
+                        'total violations': self.n_violations.item(),
+                        'steps sampled': self.steps_sampled.item(),
+                        'collect return': None,
+                        'collect return (+bonus)': None,
+                        'collect length': None,
+                        'collect safe': None,
+                        # **self.evaluate()
+                    })
                 state = next_state
 
             yield t
@@ -347,7 +358,11 @@ class SMBPO(Configurable, Module):
         self.epochs_completed += 1
 
     def evaluate_models(self):
-        states, actions, next_states = self.replay_buffer.get('states', 'actions', 'next_states')
+        states, actions, next_states, goal_mets = self.replay_buffer.get('states', 'actions', 'next_states', 'goal_mets')
+        non_goal_met_transition = (goal_mets == False)
+        states = states[non_goal_met_transition]
+        actions = actions[non_goal_met_transition]
+        next_states = next_states[non_goal_met_transition]
         state_std = states.std(dim=0)
         state_std[state_std<1e-7] = 1.0
         with torch.no_grad():

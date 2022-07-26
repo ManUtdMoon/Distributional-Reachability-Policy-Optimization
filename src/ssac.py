@@ -145,7 +145,6 @@ class SSAC(BasePolicy, Module):
         constraint_threshold = 0.
         constrained_fcn = 'reachability'
         mlp_multiplier = True
-        max_multiplier = 50.0
         penalty_lb = -1.0
         penalty_ub = 100.
         # penalty_offset = 1.0

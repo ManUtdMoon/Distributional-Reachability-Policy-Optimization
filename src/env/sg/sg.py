@@ -32,7 +32,7 @@ class SafetyGymWrapper(Wrapper):
             -np.inf, np.inf, (self.obs_flat_size + 1,), dtype=np.float32
         )  # the additional "2" is current constraint h(s) and isException
         self.info = None
-        self.margin_scale = 0.8  # the closer to 1, the harder to done
+        self.margin_scale = 0.9  # the closer to 1, the harder to done
         assert 0. < self.margin_scale < 1.
 
     def augment_obs(self, obs):
