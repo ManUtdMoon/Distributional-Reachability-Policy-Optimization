@@ -225,7 +225,8 @@ class ConstraintSafetySampleBuffer(SafetySampleBuffer):
     def __init__(self, *args, **kwargs):
         con_dim = kwargs.pop('con_dim')
         super().__init__(*args, **kwargs)
-        self._create_buffer('constraint_values', torch.float, [con_dim])
+        con_val_dim = [] if con_dim == 1 else [con_dim]
+        self._create_buffer('constraint_values', torch.float, con_val_dim)
 
 
 def concat_sample_buffers(buffers):
@@ -383,7 +384,7 @@ def sample_episode_unbatched(env, policy, eval=False,
     return episode
 
 
-def sample_episodes_batched(env, policy, n_traj, eval=False):
+def sample_episodes_batched(env, policy, n_traj, eval=False, safe_shield_threshold=-0.1):
     if not isinstance(env, BaseBatchedEnv):
         env = ProductEnv([env])
 
@@ -397,6 +398,13 @@ def sample_episodes_batched(env, policy, n_traj, eval=False):
     states = env.reset()
     while True:
         actions = policy.act(states, eval=eval)
+        # -------- safety shield ----------- #
+        if eval:
+            qcs = policy._get_qc(policy.constraint_critic(states, actions))
+            safe_actions = policy.actor_safe.act(states, eval=eval)
+            danger_bool = (qcs > safe_shield_threshold).tile((action_dim, 1)).t()
+            actions = torch.where(danger_bool, safe_actions, actions)
+
         next_states, rewards, dones, infos = env.step(actions)
         violations = [info['violation'] for info in infos]
 
