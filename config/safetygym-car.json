@@ -22,8 +22,8 @@
       "buffer_max": 500000,
       "reward_scale": 100.0,
       "alive_bonus": 0.0,
-      "safe_shield": false,
-      "safe_shield_threshold": -0.2,
+      "safe_shield": true,
+      "safe_shield_threshold": -0.05,
       "constraint_scale": 10.0
     },
     "epochs": 100

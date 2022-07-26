@@ -41,6 +41,7 @@ class SMBPO(Configurable, Module):
         constraint_offset = 0.
         safe_shield = True
         safe_shield_threshold = -0.1
+        eval_shield_threshold = -0.1
 
     def __init__(self, config, env_factory, data, epochs):
         Configurable.__init__(self, config)
@@ -464,7 +465,8 @@ class SMBPO(Configurable, Module):
             log.message(f'GPU memory info: {gpu_mem_info()}')
 
     def evaluate(self):
-        eval_traj = sample_episodes_batched(self.eval_env, self.solver, N_EVAL_TRAJ, eval=True)
+        eval_traj = sample_episodes_batched(self.eval_env, self.solver, N_EVAL_TRAJ, 
+                                            eval=True, safe_shield_threshold=self.eval_shield_threshold)
 
         lengths = [len(traj) for traj in eval_traj]
         length_mean, length_std = float(np.mean(lengths)), float(np.std(lengths))

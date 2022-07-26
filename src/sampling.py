@@ -390,7 +390,7 @@ def sample_episode_unbatched(env, policy, eval=False,
     return episode
 
 
-def sample_episodes_batched(env, policy, n_traj, eval=False):
+def sample_episodes_batched(env, policy, n_traj, eval=False, safe_shield_threshold=-0.1):
     if not isinstance(env, BaseBatchedEnv):
         env = ProductEnv([env])
 
@@ -404,6 +404,13 @@ def sample_episodes_batched(env, policy, n_traj, eval=False):
     states = env.reset()
     while True:
         actions = policy.act(states, eval=eval)
+        # -------- safety shield ----------- #
+        if eval:
+            qcs = policy._get_qc(policy.constraint_critic(states, actions))
+            safe_actions = policy.actor_safe.act(states, eval=eval)
+            danger_bool = (qcs > safe_shield_threshold).tile((action_dim, 1)).t()
+            actions = torch.where(danger_bool, safe_actions, actions)
+
         next_states, rewards, dones, infos = env.step(actions)
         violations = [info['violation'] for info in infos]
         rewards = [reward + float(infos[i].get('goal_met', False)) for i, reward in enumerate(rewards)]
