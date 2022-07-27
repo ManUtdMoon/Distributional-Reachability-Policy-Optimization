@@ -23,7 +23,8 @@
       "reward_scale": 100.0,
       "alive_bonus": 0.0,
       "safe_shield": true,
-      "safe_shield_threshold": -0.05,
+      "safe_shield_threshold": -0.2,
+      "eval_shield_threshold": -0.1,
       "constraint_scale": 10.0
     },
     "epochs": 100
