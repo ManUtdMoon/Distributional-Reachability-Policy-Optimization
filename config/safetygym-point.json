@@ -11,19 +11,20 @@
         "penalty_lb": -1.0,
         "penalty_ub": 100.0,
         "mlp_multiplier_cfg": {
-          "upper_bound": 50.0
+          "upper_bound": 200.0
         }
       },
-      "steps_per_epoch": 200,
-      "model_update_period": 50,
-      "model_initial_steps": 1000,
+      "steps_per_epoch": 1000,
+      "model_update_period": 250,
+      "model_initial_steps": 10000,
       "model_steps": 1000,
-      "buffer_min": 1000,
-      "buffer_max": 200000,
-      "reward_scale": 100.0,
+      "buffer_min": 5000,
+      "buffer_max": 500000,
+      "reward_scale": 50.0,
       "alive_bonus": 0.0,
       "safe_shield": true,
       "safe_shield_threshold": -0.2,
+      "eval_shield_threshold": -0.2,
       "constraint_scale": 10.0
     },
     "epochs": 100
