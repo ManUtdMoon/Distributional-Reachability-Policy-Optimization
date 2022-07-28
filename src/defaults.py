@@ -1,7 +1,7 @@
 import torch
 
 PRECISION = 2
-OPTIMIZER = torch.optim.AdamW
+OPTIMIZER = torch.optim.Adam
 BATCH_SIZE = 256
 ACTOR_LR = 1e-4
 CRITIC_LR = 1e-3

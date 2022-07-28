@@ -99,6 +99,7 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
                 self.min_log_var, self.max_log_var
             ],
             lr=self.learning_rate,
+            weight_decay=1e-4
         )
 
         self._init_elites()
