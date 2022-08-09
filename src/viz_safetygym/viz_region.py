@@ -184,7 +184,7 @@ class Vizer_set(object):
         self.batch_obses_list = [obs[0], obs[1], obs[2]]
         n = grid['n']
         # 2.0 Generate env
-        env_for_obs = SafetyGymWrapper(robot_type='car')
+        env_for_obs = SafetyGymWrapper(robot_type='point')
         env_for_obs.reset()
         self.layout = { 
         'robot': np.array([0.0, 0.0]), 
