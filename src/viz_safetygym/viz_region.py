@@ -183,6 +183,7 @@ class Vizer_set(object):
         obs = grid['obs']
         self.batch_obses_list = [obs[0], obs[1], obs[2]]
         n = grid['n']
+        self.hazards_size = grid['hazards_size']
         # 2.0 Generate env
         env_for_obs = SafetyGymWrapper(robot_type='point')
         env_for_obs.reset()
@@ -292,7 +293,7 @@ class Vizer_set(object):
                 # sub_ax.clabel(ct_line, inline=True, fontsize=14, fmt=r'0',)
 
                 theta = np.linspace(0, 2*np.pi, 360)
-                hazard_size = 0.25
+                hazard_size = self.hazards_size
                 hazard0_x = hazard_size * np.cos(theta) + self.layout['hazard0'][0]
                 hazard0_y = hazard_size * np.sin(theta) + self.layout['hazard0'][1]
                 hazard1_x = hazard_size * np.cos(theta) + self.layout['hazard1'][0]
@@ -380,5 +381,5 @@ def test():
 
 if __name__ == '__main__':
     # Usage: in the command line, input the followings
-    # $ python viz_region.py --run-dir <log_dir> --set env_name safetygym-car --epoch <epoch_id, can be more than 1>
+    # $ python viz_region.py --run-dir <log_dir> --set env_name safetygym-point --epoch <epoch_id, can be more than 1>
     main()

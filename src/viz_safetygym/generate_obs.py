@@ -289,11 +289,12 @@ if __name__ == "__main__":
     obs_buf_right = np.concatenate((obs_buf, cost_buf), axis=-1)
 
     obs = np.array([obs_buf_left, obs_buf_up, obs_buf_right])
-    
+    config_ns = SimpleNamespace(**config)
     np.savez(
         'grid.npz',
         obs=obs,
         n=n,
         hazards_pos=hazards_pos,
-        goal_pos=goal_pos
+        goal_pos=goal_pos,
+        hazards_size=config_ns.hazards_size
     )
