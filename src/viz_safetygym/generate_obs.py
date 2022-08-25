@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
     goal_pos = env.goal_pos[:2]
 
-    hazards_pos = np.array([[-1.5, 1.5], [-0.9, -0.2], [1.2, 1.6], [1.2, -1.2]])
+    hazards_pos = np.array([[-1.5, 1.5], [-0.9, -0.2], [1.2, 1.6], [1.5, -1.6]])
     goal_pos = np.array([-1.0, 0.7])
 
     config = {
@@ -289,11 +289,12 @@ if __name__ == "__main__":
     obs_buf_right = np.concatenate((obs_buf, cost_buf), axis=-1)
 
     obs = np.array([obs_buf_left, obs_buf_up, obs_buf_right])
-
+    config_ns = SimpleNamespace(**config)
     np.savez(
         'grid.npz',
         obs=obs,
         n=n,
         hazards_pos=hazards_pos,
-        goal_pos=goal_pos
+        goal_pos=goal_pos,
+        hazards_size=config_ns.hazards_size
     )

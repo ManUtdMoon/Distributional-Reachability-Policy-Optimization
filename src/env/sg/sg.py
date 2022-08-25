@@ -58,6 +58,18 @@ class SafetyGymWrapper(Wrapper):
         # end: compute hazards constraint values
 
         return np.concatenate([obs, [constraint_value]])
+
+    def set_state_and_get_obs(self, layout, velocimeter, robot_rot):
+        self.env.layout = layout
+        self.world_config_dict = self.build_world_config()
+        self.world_config_dict['robot_rot'] = robot_rot
+        self.world.reset(build=False)
+        self.world.rebuild(self.world_config_dict, state=False)
+        obs = self.obs()
+        obs[5:7] = velocimeter
+        obs = self.augment_obs(obs)
+
+        return obs
     
     def step(self, action: np.array):
         new_info = dict(
