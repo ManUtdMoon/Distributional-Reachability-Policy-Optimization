@@ -11,7 +11,7 @@
         "penalty_lb": -1.0,
         "penalty_ub": 100.0,
         "mlp_multiplier_cfg": {
-          "upper_bound": 200.0
+          "upper_bound": 300.0
         }
       },
       "steps_per_epoch": 1000,

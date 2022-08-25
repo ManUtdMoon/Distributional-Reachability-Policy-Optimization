@@ -406,7 +406,7 @@ def sample_episodes_batched(env, policy, n_traj, eval=False, safe_shield_thresho
         actions = policy.act(states, eval=eval)
         # -------- safety shield ----------- #
         if eval:
-            qcs = policy._get_qc(policy.constraint_critic(states, actions))
+            qcs = policy._get_qc(policy.constraint_critic(states, actions, uncertainty=policy.distributional_qc))
             safe_actions = policy.actor_safe.act(states, eval=eval)
             danger_bool = (qcs > safe_shield_threshold).tile((action_dim, 1)).t()
             actions = torch.where(danger_bool, safe_actions, actions)
