@@ -124,7 +124,13 @@ class SMBPO(Configurable, Module):
 
                 # -------- safety shield ----------- #
                 if self.safe_shield:
-                    qc = self.solver._get_qc(constraint_critic(state.unsqueeze(0), action.unsqueeze(0)))
+                    qc = self.solver._get_qc(
+                        constraint_critic(
+                            state.unsqueeze(0),
+                            action.unsqueeze(0),
+                            uncertainty=self.solver.distributional_qc
+                        )
+                    )
                     if qc > self.safe_shield_threshold:
                         action = policy_safe.act1(state, eval=True)
                     

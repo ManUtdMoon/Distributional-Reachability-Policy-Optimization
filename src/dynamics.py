@@ -89,13 +89,16 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
         self.diff_head = mlp(head_dims, layer_factory=layer_factory, activation=self.activation)
         self.log_var_head = mlp(head_dims, layer_factory=layer_factory, activation=self.activation)
         self.to(device)
-        self.optimizer = optimizer_factory([
-            *self.trunk.parameters(),
-            *self.diff_head.parameters(),
-            *self.log_var_head.parameters(),
-            self.min_log_var, self.max_log_var
-        ], lr=self.learning_rate,
-        weight_decay=1e-4)
+        self.optimizer = optimizer_factory(
+            [
+                *self.trunk.parameters(),
+                *self.diff_head.parameters(),
+                *self.log_var_head.parameters(),
+                self.min_log_var, self.max_log_var
+            ],
+            lr=self.learning_rate,
+            weight_decay=1e-4
+        )
 
         self._init_elites()
     

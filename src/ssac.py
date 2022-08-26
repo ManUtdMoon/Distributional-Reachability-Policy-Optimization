@@ -121,7 +121,7 @@ class SSAC(BasePolicy, Module):
         deterministic_backup = False
 
         critic_update_multiplier = 1
-        actor_lr = ACTOR_LR
+        actor_lr = 1e-4
         actor_lr_end = 5e-5
         critic_lr = 3e-4
         critic_lr_end = 8e-5
@@ -405,7 +405,7 @@ class SSAC(BasePolicy, Module):
                     next_qc_value = self.constraint_critic_target(next_obs, next_action)
                     qc_nonterminal = (1. - self.discount) * constraint_value + \
                                            self.discount * torch.maximum(constraint_value, next_qc_value)
-                    dones = done.tile((self.con_dim, 1)).t().float()
+                    dones = done.tile((self.con_dim, 1)).t().squeeze().float()
                     qc = qc_nonterminal * (1 - dones.float()) + constraint_value * dones.float()
                     assert qc.shape == qc_nonterminal.shape
             else:
@@ -465,7 +465,7 @@ class SSAC(BasePolicy, Module):
 
         # ----- constrained part ----- #
         if self.constrained_fcn == 'reachability':
-            actor_Qc_ub_con_dim = self.constraint_critic(obs, action, uncertainty=True)
+            actor_Qc_ub_con_dim = self.constraint_critic(obs, action, uncertainty=self.distributional_qc)
             actor_Qc = self._get_qc(actor_Qc_ub_con_dim)
             # actor_Qc = actor_Qc + (actor_Qc>0).float() * self.penalty_offset
         else:
@@ -473,7 +473,7 @@ class SSAC(BasePolicy, Module):
         if self.mlp_multiplier:
             with torch.no_grad():
                 action_safe = self.actor_safe.act(obs, eval=True)
-                safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=True))
+                safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
                 # lams = torch.max(self.multiplier(obs, action), (actor_Qc>0)*19.0).detach()
                 lams = self.multiplier(obs, safe_Qc)
             assert lams.shape == actor_Qc.shape
@@ -488,7 +488,7 @@ class SSAC(BasePolicy, Module):
         if self.constrained_fcn == 'reachability':
             distr_safe = self.actor_safe.distr(obs)
             action_safe = distr_safe.rsample()
-            actor_safe_Qc_con_dim = self.constraint_critic(obs, action_safe, uncertainty=True)
+            actor_safe_Qc_con_dim = self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc)
             actor_safe_Qc = self._get_qc(actor_safe_Qc_con_dim)
             actor_safe_loss = torch.mean(actor_safe_Qc)
         # ----- safe actor loss end ----- #
@@ -527,7 +527,7 @@ class SSAC(BasePolicy, Module):
         action = distr.rsample()
         
         if self.constrained_fcn == 'reachability':
-            actor_Qc = self.constraint_critic(obs, action, uncertainty=True)
+            actor_Qc = self.constraint_critic(obs, action, uncertainty=self.distributional_qc)
             actor_Qc = self._get_qc(actor_Qc)
         else:
             actor_Qc = self.constraint_critic(obs, action)
@@ -541,7 +541,7 @@ class SSAC(BasePolicy, Module):
         if self.mlp_multiplier:
             action_safe = self.actor_safe.act(obs, eval=True)
             with torch.no_grad():
-                safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=True))
+                safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
             lams = self.multiplier(obs, safe_Qc)
             assert lams.shape == penalty.shape
             lams_safe = torch.mul(safe_Qc<=0, lams)
