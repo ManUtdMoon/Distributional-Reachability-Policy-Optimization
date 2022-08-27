@@ -3,14 +3,14 @@
     "alg_cfg": {
       "sac_cfg": {
         "target_entropy": -2.0,
-        "constraint_threshold": -0.4,
-        "mlp_multiplier": true,
+        "constraint_threshold": 0.0,
+        "mlp_multiplier": false,
         "penalty_lb": -1.0,
         "penalty_ub": 100.0,
         "mlp_multiplier_cfg": {
           "upper_bound": 50.0
         },
-        "actor_lr_end": 8e-5
+        "actor_lr_end": 5e-5
       },
       "steps_per_epoch": 360,
       "model_update_period": 90,

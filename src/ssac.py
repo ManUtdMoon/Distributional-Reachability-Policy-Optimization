@@ -143,8 +143,8 @@ class SSAC(BasePolicy, Module):
 
         # safety-related hyper-params
         constraint_threshold = 0.
-        constrained_fcn = 'reachability'
-        mlp_multiplier = True
+        constrained_fcn = 'cost'
+        mlp_multiplier = False
         penalty_lb = -1.0
         penalty_ub = 100.
         # penalty_offset = 1.0
@@ -152,9 +152,9 @@ class SSAC(BasePolicy, Module):
         multiplier_update_interval = 5
 
         lam_epsilon = 1.0
-        qc_under_uncertainty = True
+        qc_under_uncertainty = False
         qc_td_bound = 5.
-        distributional_qc = True
+        distributional_qc = False
 
     def __init__(self, config, state_dim, action_dim, con_dim, 
                  horizon, epochs, steps_per_epoch, solver_updates_per_step,
@@ -240,7 +240,7 @@ class SSAC(BasePolicy, Module):
             )
         else:
             self.multiplier = nn.parameter.Parameter(
-                torch.tensor(10., device=device, dtype=torch.float)  # todo: a larger initial multiplier
+                torch.tensor(0., device=device, dtype=torch.float)  # todo: a larger initial multiplier
             )
             self.multiplier_optimizer = optimizer_factory(
                 [self.multiplier], 
@@ -478,8 +478,8 @@ class SSAC(BasePolicy, Module):
                 lams = self.multiplier(obs, safe_Qc)
             assert lams.shape == actor_Qc.shape
         else:
-            # lams = self.lam.detach()
-            lams = self.fixed_multiplier
+            lams = self.lam.detach()
+            # lams = self.fixed_multiplier
             actor_Qc = torch.clamp(actor_Qc, min=self.penalty_lb, max=self.penalty_ub)
         cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
         # ----- constrained part end ----- #
@@ -506,8 +506,12 @@ class SSAC(BasePolicy, Module):
 
     def update_actor_and_alpha(self, obs):
         losses = self.actor_loss(obs, include_alpha=self.autotune_alpha)
-        optimizers = [self.actor_optimizer, self.alpha_optimizer, self.actor_safe_optimizer] if self.autotune_alpha else \
-                     [self.actor_optimizer, self.actor_safe_optimizer]
+        optimizers = [self.actor_optimizer]
+        if self.autotune_alpha:
+            optimizers.append(self.alpha_optimizer)
+        if self.constrained_fcn == 'reachability':
+            optimizers.append(self.actor_safe_optimizer)
+
         assert len(losses) == len(optimizers)
         for i, (loss, optimizer) in enumerate(zip(losses, optimizers)):
             optimizer.zero_grad()
@@ -531,7 +535,7 @@ class SSAC(BasePolicy, Module):
             actor_Qc = self._get_qc(actor_Qc)
         else:
             actor_Qc = self.constraint_critic(obs, action)
-            assert actor_Qc.size(1) == 1
+            assert actor_Qc.size(0) == self.batch_size
 
         penalty = torch.clamp(
             actor_Qc - self.constraint_threshold,

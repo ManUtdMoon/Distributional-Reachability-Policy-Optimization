@@ -379,20 +379,21 @@ class SMBPO(Configurable, Module):
                             lambda s, a: self.solver.constraint_critic(s, a, sample=True)[1],
                             [states, actions]
                         )
-                    a_safe = batch_map(
-                        lambda s: self.solver.actor_safe.act(s, eval=True).detach(),
-                        [states]
-                    )
-                    safe_qcs = batch_map(
-                        lambda s, a: self.solver._get_qc(self.solver.constraint_critic(s, a)),
-                        [states, a_safe]
-                    )
-                    if self.sac_cfg.mlp_multiplier:
-                        lams = batch_map(
-                            lambda s, qc: self.solver.multiplier(s, qc),
-                            [states, safe_qcs]
+                    if self.sac_cfg.constrained_fcn == 'reachability':
+                        a_safe = batch_map(
+                            lambda s: self.solver.actor_safe.act(s, eval=True).detach(),
+                            [states]
                         )
-                        mean_lam = lams.mean()
+                        safe_qcs = batch_map(
+                            lambda s, a: self.solver._get_qc(self.solver.constraint_critic(s, a)),
+                            [states, a_safe]
+                        )
+                        if self.sac_cfg.mlp_multiplier:
+                            lams = batch_map(
+                                lambda s, qc: self.solver.multiplier(s, qc),
+                                [states, safe_qcs]
+                            )
+                            mean_lam = lams.mean()
 
                     mean_q = qs.mean()
                     if self.sac_cfg.constrained_fcn == 'reachability':
@@ -413,6 +414,8 @@ class SMBPO(Configurable, Module):
         
         if not self.sac_cfg.mlp_multiplier:
             mean_lam = self.solver.lam.detach().item()
+            log.message(f'Average Lambda: {mean_lam}')
+            self.data.append(f'Average Lambda', mean_lam)
 
         if torch.cuda.is_available():
             log.message(f'GPU memory info: {gpu_mem_info()}')
