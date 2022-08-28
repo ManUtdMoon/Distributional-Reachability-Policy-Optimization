@@ -48,9 +48,9 @@ class ConstraintCritic(Configurable, Module):
         trunk_layers = 2
         head_layers = 1
         hidden_dim = 256
-        log_std_min = -2.
+        log_std_min = -3.
         log_std_max = 4.
-        std_ratio = 1. # 1 2 3, shift how many stds
+        std_ratio = 2. # 1 2 3, shift how many stds
 
     def __init__(self, config, state_dim, action_dim, output_dim, output_activation=None):
         Configurable.__init__(self, config)
@@ -121,8 +121,8 @@ class SSAC(BasePolicy, Module):
         deterministic_backup = False
 
         critic_update_multiplier = 1
-        actor_lr = 1e-4
-        actor_lr_end = 5e-5
+        actor_lr = 8e-5
+        actor_lr_end = 4e-5
         critic_lr = 3e-4
         critic_lr_end = 8e-5
         multiplier_lr = 3e-4

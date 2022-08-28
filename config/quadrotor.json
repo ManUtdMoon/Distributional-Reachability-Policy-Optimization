@@ -3,14 +3,15 @@
     "alg_cfg": {
       "sac_cfg": {
         "target_entropy": -2.0,
-        "constraint_threshold": -0.4,
+        "constraint_threshold": -0.2,
         "mlp_multiplier": true,
         "penalty_lb": -1.0,
         "penalty_ub": 100.0,
         "mlp_multiplier_cfg": {
           "upper_bound": 50.0
         },
-        "actor_lr_end": 8e-5
+        "actor_lr": 1e-4,
+        "actor_lr_end": 5e-5
       },
       "steps_per_epoch": 360,
       "model_update_period": 90,
@@ -20,7 +21,7 @@
       "buffer_max": 360000,
       "reward_scale": 1.0,
       "alive_bonus": 2.0,
-      "safe_shield": false,
+      "safe_shield": true,
       "safe_shield_threshold": -0.2
     },
     "epochs": 100
