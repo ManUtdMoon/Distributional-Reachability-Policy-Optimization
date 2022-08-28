@@ -124,15 +124,14 @@ class SMBPO(Configurable, Module):
 
                 # -------- safety shield ----------- #
                 if self.safe_shield:
-                    qc = self.solver._get_qc(
-                        constraint_critic(
-                            state.unsqueeze(0),
-                            action.unsqueeze(0),
-                            uncertainty=self.solver.distributional_qc
-                        )
+                    acts = policy.distr(state).sample((20,))
+                    states = state.tile((20, 1))
+                    qcs = constraint_critic(
+                        states,
+                        acts,
+                        uncertainty=self.solver.distributional_qc
                     )
-                    if qc > self.safe_shield_threshold:
-                        action = policy_safe.act1(state, eval=True)
+                    action = acts[qcs.argmin()]
                     
                     # search for safe action if actor_safe is not safe, but maybe useless
                     # qc_safe = torch.max(constraint_critic(state.unsqueeze(0), action.unsqueeze(0)))
@@ -176,7 +175,7 @@ class SMBPO(Configurable, Module):
                 episode_safe = not episode.get('violations').any()
                 self.episodes_sampled += 1
                 if not episode_safe:
-                    self.n_violations += 1
+                    self.n_violations += episode.get('violations').sum()
 
                 self._log_tabular({
                     'episodes sampled': self.episodes_sampled.item(),

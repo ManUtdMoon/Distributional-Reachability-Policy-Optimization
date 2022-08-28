@@ -156,6 +156,10 @@ class SSAC(BasePolicy, Module):
         qc_td_bound = 5.
         distributional_qc = False
 
+        # conservative safety critic
+        enable_csc = False
+        csc_weight_coefficient = 0.5
+
     def __init__(self, config, state_dim, action_dim, con_dim, 
                  horizon, epochs, steps_per_epoch, solver_updates_per_step,
                  constraint_scale, env_factory, model_ensemble,
@@ -424,7 +428,16 @@ class SSAC(BasePolicy, Module):
             return loss
         else:
             assert target_bounded is None
-            return self.criterion(qcs, target)
+            if self.enable_csc:
+                mse_loss = self.criterion(qcs, target)
+                with torch.no_grad():
+                    distr = self.actor.distr(obs)
+                    action = distr.sample()
+                qcs_pi = self.constraint_critic(obs, action)
+                csc_loss = torch.mean(qcs - qcs_pi)
+                return mse_loss + csc_loss * self.csc_weight_coefficient
+            else:
+                return self.criterion(qcs, target)
 
     def constraint_critic_loss(self, obs, action, next_obs, reward, done, violation, constraint_value):
         if self.distributional_qc:
