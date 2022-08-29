@@ -113,7 +113,9 @@ class QuadrotorWrapperEnv(Wrapper):
                (theta > theta_threshold_radians)
         
         assert done.shape == batch_size
-        return done
+        violation = self.check_violation(states)
+        assert violation.shape == done.shape
+        return np.logical_or(done, violation)
 
     def check_violation(self, states: np.array):
         '''Compute whether the constraints are violated
