@@ -59,18 +59,14 @@ class QuadrotorWrapperEnv(Wrapper):
         self.info = None
     
     def step(self, action: np.array):
-        new_info = dict(
-            constraint_value=self.info['constraint_values'],
-        )
-        assert np.all(np.allclose(new_info['constraint_value'], self.constraints.get_value(self.state), atol=1e-6)), \
-            print(new_info['constraint_value'], self.constraints.get_value(self.state))
         next_obs, rew, done, info = super().step(action)
-        new_info.update(dict(
+        new_info = dict(
+            constraint_value=info['constraint_values'],
             violation=bool(info['constraint_violation']),
             **info
-        ))
-        self.state = next_obs
-        self.info = new_info  # including: h(s) not h(s')
+        )
+        assert np.all(info['constraint_values'] == self.get_constraint_values(next_obs)), \
+            print(info['constraint_values'], self.constraints.get_value(next_obs))
         return next_obs, rew, done, new_info
     
     def reset(self):
@@ -113,7 +109,9 @@ class QuadrotorWrapperEnv(Wrapper):
                (theta > theta_threshold_radians)
         
         assert done.shape == batch_size
-        return done
+        violation = self.check_violation(states)
+        assert violation.shape == done.shape
+        return np.logical_or(done, violation)
 
     def check_violation(self, states: np.array):
         '''Compute whether the constraints are violated
