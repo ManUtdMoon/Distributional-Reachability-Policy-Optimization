@@ -161,8 +161,8 @@ class SMBPO(Configurable, Module):
             # print('constraint_value', constraint_value)
             # print('get_constraint_value', self.get_constraint_value(next_state.unsqueeze(0)).cpu())
             # print(constraint_value.numpy() == self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
-            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(state.unsqueeze(0)).cpu(), atol=1e-05)), \
-                print(constraint_value.numpy() - self.get_constraint_value(state.unsqueeze(0)).cpu().numpy())
+            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(next_state.unsqueeze(0)).cpu(), atol=1e-05)), \
+                print(constraint_value.numpy() - self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
             for buffer in [episode, self.replay_buffer]:
                 buffer.append(states=state, actions=action, next_states=next_state,
                               rewards=reward, dones=done, violations=violation,
