@@ -176,8 +176,8 @@ class SMBPO(Configurable, Module):
             # print('constraint_value', constraint_value)
             # print('get_constraint_value', self.get_constraint_value(next_state.unsqueeze(0)).cpu())
             # print(constraint_value.numpy() == self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
-            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(state.unsqueeze(0)).cpu(), atol=1e-05)), \
-                print(constraint_value.numpy() - self.get_constraint_value(state.unsqueeze(0)).cpu().numpy())
+            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(next_state.unsqueeze(0)).cpu(), atol=1e-05)), \
+                print(constraint_value.numpy() - self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
 
             if self.reward_scale != 0:
                 buf_reward = reward * self.reward_scale
@@ -207,7 +207,7 @@ class SMBPO(Configurable, Module):
                 episode_safe = not episode.get('violations').any()
                 self.episodes_sampled += 1
                 if not episode_safe:
-                    self.n_violations += 1
+                    self.n_violations += episode.get('violations').sum()
 
                 self._log_tabular({
                     'episodes sampled': self.episodes_sampled.item(),
@@ -426,20 +426,21 @@ class SMBPO(Configurable, Module):
                             lambda s, a: self.solver.constraint_critic(s, a, sample=True)[1],
                             [states, actions]
                         )
-                    a_safe = batch_map(
-                        lambda s: self.solver.actor_safe.act(s, eval=True).detach(),
-                        [states]
-                    )
-                    safe_qcs = batch_map(
-                        lambda s, a: self.solver._get_qc(self.solver.constraint_critic(s, a)),
-                        [states, a_safe]
-                    )
-                    if self.sac_cfg.mlp_multiplier:
-                        lams = batch_map(
-                            lambda s, qc: self.solver.multiplier(s, qc),
-                            [states, safe_qcs]
+                    if self.sac_cfg.constrained_fcn == 'reachability':
+                        a_safe = batch_map(
+                            lambda s: self.solver.actor_safe.act(s, eval=True).detach(),
+                            [states]
                         )
-                        mean_lam = lams.mean()
+                        safe_qcs = batch_map(
+                            lambda s, a: self.solver._get_qc(self.solver.constraint_critic(s, a)),
+                            [states, a_safe]
+                        )
+                        if self.sac_cfg.mlp_multiplier:
+                            lams = batch_map(
+                                lambda s, qc: self.solver.multiplier(s, qc),
+                                [states, safe_qcs]
+                            )
+                            mean_lam = lams.mean()
 
                     mean_q = qs.mean()
                     if self.sac_cfg.constrained_fcn == 'reachability':
@@ -450,8 +451,6 @@ class SMBPO(Configurable, Module):
                     mean_s = torch.mean(states, dim=0)
                     mean_a = torch.mean(actions, dim=0)
                     mean_r = torch.mean(rewards, dim=0)
-            # log.message(f'Average s {which}: {mean_s}')
-            # log.message(f'Average a {which}: {mean_a}')
             log.message(f'Average r {which}: {mean_r}')
             log.message(f'Average Q {which}: {mean_q}')
             self.data.append(f'Average Q {which}', mean_q)
@@ -466,6 +465,8 @@ class SMBPO(Configurable, Module):
         
         if not self.sac_cfg.mlp_multiplier:
             mean_lam = self.solver.lam.detach().item()
+            log.message(f'Average Lambda: {mean_lam}')
+            self.data.append(f'Average Lambda', mean_lam)
 
         if torch.cuda.is_available():
             log.message(f'GPU memory info: {gpu_mem_info()}')

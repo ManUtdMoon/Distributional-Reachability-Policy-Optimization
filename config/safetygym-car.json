@@ -6,7 +6,7 @@
     "alg_cfg": {
       "sac_cfg": {
         "target_entropy": -2.0,
-        "constraint_threshold": -0.3,
+        "constraint_threshold": 0.0,
         "mlp_multiplier": true,
         "penalty_lb": -1.0,
         "penalty_ub": 100.0,

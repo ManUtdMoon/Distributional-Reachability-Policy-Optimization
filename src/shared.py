@@ -1,4 +1,3 @@
-from re import S
 import numpy as np
 import torch
 from gym.wrappers import RescaleAction

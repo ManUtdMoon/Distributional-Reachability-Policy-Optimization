@@ -7,4 +7,4 @@ ACTOR_LR = 1e-4
 CRITIC_LR = 1e-3
 
 # ROOT_DIR = None    # set a path (directory) where experiments should be saved
-ROOT_DIR = '/home/yudongjie/zwj_projects/SafeyGym_MBRL/Safe_MBR'
+ROOT_DIR = '/home/ydj20/project/Safe-MBRL'

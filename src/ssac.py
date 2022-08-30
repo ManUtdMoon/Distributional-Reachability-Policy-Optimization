@@ -506,8 +506,12 @@ class SSAC(BasePolicy, Module):
 
     def update_actor_and_alpha(self, obs):
         losses = self.actor_loss(obs, include_alpha=self.autotune_alpha)
-        optimizers = [self.actor_optimizer, self.alpha_optimizer, self.actor_safe_optimizer] if self.autotune_alpha else \
-                     [self.actor_optimizer, self.actor_safe_optimizer]
+        optimizers = [self.actor_optimizer]
+        if self.autotune_alpha:
+            optimizers.append(self.alpha_optimizer)
+        if self.constrained_fcn == 'reachability':
+            optimizers.append(self.actor_safe_optimizer)
+
         assert len(losses) == len(optimizers)
         for i, (loss, optimizer) in enumerate(zip(losses, optimizers)):
             optimizer.zero_grad()
@@ -531,7 +535,7 @@ class SSAC(BasePolicy, Module):
             actor_Qc = self._get_qc(actor_Qc)
         else:
             actor_Qc = self.constraint_critic(obs, action)
-            assert actor_Qc.size(1) == 1
+            assert actor_Qc.size(0) == self.batch_size
 
         penalty = torch.clamp(
             actor_Qc - self.constraint_threshold,
@@ -582,6 +586,13 @@ class SSAC(BasePolicy, Module):
         self.total_updates += 1
     
     def _get_qc(self, qc_con_dim):
+        '''get qc with qc_con_dim 
+            params:
+                qc_con_dim: (batch, con_dim) when con_dim > 1 
+                    else: (batch,)
+            return:
+                qc: (batch,)
+        '''
         if self.con_dim > 1:
             assert qc_con_dim.size(-1) == self.con_dim
             return torch.max(qc_con_dim, dim=-1)[0]
