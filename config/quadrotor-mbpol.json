@@ -7,7 +7,10 @@
       "mlp_multiplier": false,
       "penalty_lb": -1.0,
       "penalty_ub": 100.0,
-      "constrained_fcn": "cost"
+      "constrained_fcn": "cost",
+      "enable_csc": false,
+      "actor_lr": 1e-4,
+      "actor_lr_end": 4e-5
     },
     "steps_per_epoch": 360,
     "model_update_period": 90,
@@ -15,7 +18,7 @@
     "model_steps": 1000,
     "buffer_min": 1800,
     "buffer_max": 360000,
-    "reward_scale": 1.0,
+    "reward_scale": 2.0,
     "alive_bonus": 2.0,
     "safe_shield": false
   },
