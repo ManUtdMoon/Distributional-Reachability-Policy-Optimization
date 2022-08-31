@@ -10,7 +10,7 @@
       "constrained_fcn": "cost",
       "enable_csc": false,
       "actor_lr": 1e-4,
-      "actor_lr_end": 4e-5
+      "actor_lr_end": 5e-5
     },
     "steps_per_epoch": 360,
     "model_update_period": 90,
@@ -19,8 +19,11 @@
     "buffer_min": 1800,
     "buffer_max": 360000,
     "reward_scale": 2.0,
+    "constraint_scale": 10.0,
     "alive_bonus": 2.0,
-    "safe_shield": false
+    "safe_shield": false,
+    "real_fraction": 1.0,
+    "horizon": 1
   },
   "epochs": 100
 }

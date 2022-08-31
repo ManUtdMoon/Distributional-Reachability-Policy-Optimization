@@ -71,12 +71,12 @@ class SafeInvertedPendulumEnv(InvertedPendulumEnv):
             constraint_value=constraint_value
         )
 
-        done = np.any(self._soft_constraint_values(next_state) > 0.).item()
+        done = np.any(self._constraint_values(next_state) > 0.).item()
 
         return next_state, reward, done, info
 
     def check_done(self, states: np.array):
-        larger_violations = self.soft_constraints.is_violated(states)
+        larger_violations = self.constraints.is_violated(states)
         assert len(larger_violations.shape) == 1
         return larger_violations
     
