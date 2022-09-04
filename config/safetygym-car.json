@@ -12,6 +12,10 @@
         "penalty_ub": 100.0,
         "mlp_multiplier_cfg": {
           "upper_bound": 100.0
+        },
+        "constraint_critic_cfg": {
+          "std_ratio": 1.0,
+          "log_std_min": -5.0
         }
       },
       "steps_per_epoch": 1000,
@@ -24,8 +28,9 @@
       "alive_bonus": 0.0,
       "safe_shield": true,
       "safe_shield_threshold": -0.05,
-      "eval_shield_threshold": -0.1,
-      "constraint_scale": 10.0
+      "eval_shield_threshold": -0.05,
+      "constraint_scale": 100.0,
+      "constraint_offset": 0.0
     },
     "epochs": 100
   }

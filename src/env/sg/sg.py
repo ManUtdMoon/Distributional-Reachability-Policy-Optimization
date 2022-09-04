@@ -18,13 +18,9 @@ class SafetyGymWrapper(Wrapper):
             'car': car_goal_config
         }
         env_cfg = deepcopy(env_cfg_dict[robot_type])
-        # if id is None:  # for train env
-        #     env_cfg['continue_goal'] = False
-        # else:  # for eval env
-        #     env_cfg['continue_goal'] = True
         env = SimpleEngine(env_cfg)
         super().__init__(env)
-
+        self.done_on_violation = (id is None)  # train: done on violation; eval: false
         self._max_episode_steps = self.num_steps
 
         self.con_dim = 1
@@ -83,7 +79,7 @@ class SafetyGymWrapper(Wrapper):
 
         # if next_state[-1] >= self.margin_scale * self.env.hazards_size:
         #     done = True
-        if (next_state[-1] > 0): done = True
+        if (next_state[-1] > 0) and self.done_on_violation: done = True
 
         return next_state, rew, done, new_info
 

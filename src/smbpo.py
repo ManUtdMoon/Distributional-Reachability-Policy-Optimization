@@ -179,10 +179,27 @@ class SMBPO(Configurable, Module):
             assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(next_state.unsqueeze(0)).cpu(), atol=1e-05)), \
                 print(constraint_value.numpy() - self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
 
+            # -------------- reward & constraint value preprocess -------------- #
             if self.reward_scale != 0:
                 buf_reward = reward * self.reward_scale
-            goal_met = ('goal_met' in info_keys)
 
+            buf_constraint_value = torch.where(
+                constraint_value > 0,
+                constraint_value * self.constraint_scale + self.constraint_offset,
+                constraint_value
+            )
+
+            # Modify the last dimension of states, i.e. the learned constrained value
+            # to avoid small values hindering faster learning, must correspond to the 
+            # buf_constrain_value calculation above
+            assert len(state.shape) == len(next_state.shape) == 1
+            if state[-1] > 0:
+                state[-1] = state[-1] * self.constraint_scale + self.constraint_offset
+            if next_state[-1] > 0:
+                next_state[-1] = next_state[-1] * self.constraint_scale + self.constraint_offset
+            # -------------- reward & constraint value preprocess -------------- #
+
+            goal_met = ('goal_met' in info_keys)
             computed_reward = self.get_reward(state.unsqueeze(0), action.unsqueeze(0), next_state.unsqueeze(0)).cpu()
 
             # assert torch.isclose(torch.tensor(reward), computed_reward, atol=1e-05) or goal_met, \
@@ -197,7 +214,7 @@ class SMBPO(Configurable, Module):
                            constraint_values=constraint_value, goal_mets=goal_met)
             self.replay_buffer.append(states=state, actions=action, next_states=next_state,
                                       rewards=buf_reward, dones=done or goal_met, violations=violation,
-                                      constraint_values=constraint_value, goal_mets=goal_met)
+                                      constraint_values=buf_constraint_value, goal_mets=goal_met)
             self.steps_sampled += 1
 
             if done or (len(episode) == max_episode_steps):
@@ -305,9 +322,9 @@ class SMBPO(Configurable, Module):
         if self.alive_bonus != 0:    
             combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] + self.alive_bonus
         CONSTRAINT_VALUE_INDEX = 6
-        combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] * self.constraint_scale
-        combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] + \
-            (combined_samples[CONSTRAINT_VALUE_INDEX]>0).float() * self.constraint_offset
+        # combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] * self.constraint_scale
+        # combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] + \
+        #     (combined_samples[CONSTRAINT_VALUE_INDEX]>0).float() * self.constraint_offset
 
         # learning
         critic_loss, constraint_critic_loss = solver.update_critic(*combined_samples)
@@ -396,16 +413,16 @@ class SMBPO(Configurable, Module):
         log.message(f'\tReal: {len(self.replay_buffer)}')
         log.message(f'\tVirtual: {len(self.virt_buffer)}')
 
-        real_states, real_actions, real_violations, real_rewards = self.replay_buffer.get('states', 'actions', 'violations', 'rewards')
-        virt_states, virt_violations, virt_rewards = self.virt_buffer.get('states', 'violations', 'rewards')
+        real_states, real_actions, real_violations, real_rewards, real_cons = self.replay_buffer.get('states', 'actions', 'violations', 'rewards', 'constraint_values')
+        virt_states, virt_violations, virt_rewards, virt_cons = self.virt_buffer.get('states', 'violations', 'rewards', 'constraint_values')
         virt_actions = self.actor.act(virt_states, eval=True).detach()
         sa_data = {
-            'real (done)': (real_states[real_violations], real_actions[real_violations], real_rewards[real_violations]),
-            'real (~done)': (real_states[~real_violations], real_actions[~real_violations], real_rewards[~real_violations]),
-            'virtual (done)': (virt_states[virt_violations], virt_actions[virt_violations], virt_rewards[virt_violations]),
-            'virtual (~done)': (virt_states[~virt_violations], virt_actions[~virt_violations], virt_rewards[~virt_violations])
+            'real (done)': (real_states[real_violations], real_actions[real_violations], real_rewards[real_violations], real_cons[real_violations]),
+            'real (~done)': (real_states[~real_violations], real_actions[~real_violations], real_rewards[~real_violations], real_cons[~real_violations]),
+            'virtual (done)': (virt_states[virt_violations], virt_actions[virt_violations], virt_rewards[virt_violations], virt_cons[virt_violations]),
+            'virtual (~done)': (virt_states[~virt_violations], virt_actions[~virt_violations], virt_rewards[~virt_violations], virt_cons[~virt_violations])
         }
-        for which, (states, actions, rewards) in sa_data.items():
+        for which, (states, actions, rewards, cons) in sa_data.items():
             if len(states) == 0:
                 mean_q = None
                 mean_qc = None
@@ -414,6 +431,7 @@ class SMBPO(Configurable, Module):
                 mean_s = None
                 mean_a = None
                 mean_r = None
+                mean_h = None
             else:
                 with torch.no_grad():
                     qs = batch_map(lambda s, a: self.solver.critic.mean(s, a), [states, actions])
@@ -451,7 +469,9 @@ class SMBPO(Configurable, Module):
                     mean_s = torch.mean(states, dim=0)
                     mean_a = torch.mean(actions, dim=0)
                     mean_r = torch.mean(rewards, dim=0)
+                    mean_h = torch.mean(cons, dim=0)
             log.message(f'Average r {which}: {mean_r}')
+            log.message(f'Average h {which}: {mean_h}')
             log.message(f'Average Q {which}: {mean_q}')
             self.data.append(f'Average Q {which}', mean_q)
             log.message(f'Average Qc {which}: {mean_qc}')

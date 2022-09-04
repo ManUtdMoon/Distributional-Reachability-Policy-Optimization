@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
     goal_pos = env.goal_pos[:2]
 
-    hazards_pos = np.array([[-1.5, 1.5], [-0.9, -0.2], [1.2, 1.6], [1.5, -1.6]])
+    hazards_pos = np.array([[-1.5, 1.5], [-0.9, -0.2], [1.2, 1.6], [0.5, -1.3], [0.8, 0.1]])
     goal_pos = np.array([-1.0, 0.7])
 
     config = {

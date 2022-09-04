@@ -48,9 +48,9 @@ class ConstraintCritic(Configurable, Module):
         trunk_layers = 2
         head_layers = 1
         hidden_dim = 256
-        log_std_min = -3.
+        log_std_min = -5.
         log_std_max = 4.
-        std_ratio = 2. # 1 2 3, shift how many stds
+        std_ratio = 3. # 1 2 3, shift how many stds
 
     def __init__(self, config, state_dim, action_dim, output_dim, output_activation=None):
         Configurable.__init__(self, config)
@@ -175,8 +175,6 @@ class SSAC(BasePolicy, Module):
         self.env = env_factory()
         self.check_done = lambda states: torchify(self.env.check_done(states.cpu().numpy()))
         self.check_violation = lambda states: torchify(self.env.check_violation(states.cpu().numpy()))
-        self.get_constraint_value = lambda states: \
-            torchify(self.env.get_constraint_values(states.cpu().numpy()) * constraint_scale)
 
         self.model_ensemble = model_ensemble
 

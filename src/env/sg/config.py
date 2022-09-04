@@ -21,7 +21,7 @@ point_goal_config = {
     'constrain_hazards': True,
     'constrain_indicator': False,
 
-    'hazards_num': 4,
+    'hazards_num': 5,
     'hazards_keepout': 0.4,
     'hazards_size': 0.15,
     'hazards_cost': 1.0,

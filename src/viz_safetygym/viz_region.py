@@ -187,7 +187,8 @@ class Vizer_set(object):
         'hazard0': np.array([-1.5, 1.5]), 
         'hazard1': np.array([-0.9, -0.2]), 
         'hazard2': np.array([1.2, 1.6]), 
-        'hazard3': np.array([1.5, -1.6])
+        'hazard3': np.array([0.5, -1.3]),
+        'hazard4': np.array([0.8, 0.1])
         }
 
         # 2.1 Generate location
@@ -299,6 +300,8 @@ class Vizer_set(object):
                 hazard2_y = hazard_size * np.sin(theta) + self.layout['hazard2'][1]
                 hazard3_x = hazard_size * np.cos(theta) + self.layout['hazard3'][0]
                 hazard3_y = hazard_size * np.sin(theta) + self.layout['hazard3'][1]
+                hazard4_x = hazard_size * np.cos(theta) + self.layout['hazard4'][0]
+                hazard4_y = hazard_size * np.sin(theta) + self.layout['hazard4'][1]
                 goal_x =  0.3 * np.cos(theta) + self.layout['goal'][0]
                 goal_y =  0.3 * np.sin(theta) + self.layout['goal'][1]
 
@@ -306,6 +309,7 @@ class Vizer_set(object):
                 sub_ax.plot(hazard1_x, hazard1_y, color='black', linestyle='dashed', linewidth=0.5)
                 sub_ax.plot(hazard2_x, hazard2_y, color='black', linestyle='dashed', linewidth=0.5)
                 sub_ax.plot(hazard3_x, hazard3_y, color='black', linestyle='dashed', linewidth=0.5)
+                sub_ax.plot(hazard4_x, hazard4_y, color='black', linestyle='dashed', linewidth=0.5)
                 sub_ax.plot(goal_x, goal_y, color='black', linestyle='solid', linewidth=0.5)
 
                 sub_ax.set_yticks(np.linspace(-2.0, 2.0, 3))
@@ -350,7 +354,8 @@ def test():
     'hazard0': np.array([-1.5, 1.5]), 
     'hazard1': np.array([-0.9, -0.2]), 
     'hazard2': np.array([1.2, 1.6]), 
-    'hazard3': np.array([1.5, -1.6])
+    'hazard3': np.array([0.5, -1.3]),
+    'hazard4': np.array([0.8, 0.1])
     }
         # 2.2 convert state to obs
     def state2obs(env, basic_layout, x, y, phi, v_x, v_y):
