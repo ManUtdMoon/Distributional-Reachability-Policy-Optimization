@@ -4,12 +4,13 @@ import random
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 from .config import BaseConfig, Configurable, Optional
 from .defaults import ACTOR_LR, OPTIMIZER
 from .log import default_log as log
 from .policy import BasePolicy, SquashedGaussianPolicy
-from .torch_util import device, Module, mlp, update_ema, freeze_module
+from .torch_util import device, Module, mlp, update_ema, freeze_module, torchify
 from .util import pythonic_mean
 
 
@@ -28,7 +29,7 @@ class CriticEnsemble(Configurable, Module):
         ])
 
     def all(self, state, action):
-        sa = torch.cat([state, action], 1)
+        sa = torch.cat([state, action], -1)
         return [q(sa) for q in self.qs]
 
     def min(self, state, action):
@@ -38,7 +39,7 @@ class CriticEnsemble(Configurable, Module):
         return pythonic_mean(self.all(state, action))
 
     def random_choice(self, state, action):
-        sa = torch.cat([state, action], 1)
+        sa = torch.cat([state, action], -1)
         return random.choice(self.qs)(sa)
 
 
@@ -57,21 +58,28 @@ class SSAC(BasePolicy, Module):
         critic_lr_end = 8e-5
         critic_cfg = CriticEnsemble.Config()
         tau = 0.005
+        
+        actor_update_interval = 2
+
         batch_size = 256
         hidden_dim = 256
         hidden_layers = 2
-        update_violation_cost = True  # if ==zero: SMBPO -> MBPO
+        update_violation_cost = False  # TODO: if set to False: SMBPO -> MBPO
+        
         grad_norm = 5.
 
-    def __init__(self, config, state_dim, action_dim, horizon,
-                 optimizer_factory=OPTIMIZER):
+    def __init__(self, config, state_dim, action_dim, con_dim, 
+                 horizon, epochs, steps_per_epoch, solver_updates_per_step,
+                 env_factory, model_ensemble, optimizer_factory=OPTIMIZER):
         Configurable.__init__(self, config)
         Module.__init__(self)
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.con_dim = con_dim
         self.horizon = horizon
         self.violation_cost = 0.0
-        # epochs * steps_per_epoch * solver_updates_per_step
-        # because we cannot pass the higher config to here, so we put it here and it is super ugly. We admit it.
-        self.updates_per_training = 10 * 1000 * 10
+        self.updates_per_training = epochs * steps_per_epoch * solver_updates_per_step
+        self.actor_updates_num = int(self.updates_per_training / self.actor_update_interval)
 
         self.actor = SquashedGaussianPolicy(mlp(
             [state_dim, *([self.hidden_dim] * self.hidden_layers), action_dim*2]
@@ -90,7 +98,7 @@ class SSAC(BasePolicy, Module):
         self.actor_optimizer = optimizer_factory(self.actor.parameters(), lr=self.actor_lr, weight_decay=1e-4)
         self.actor_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             self.actor_optimizer,
-            T_max=self.updates_per_training,
+            T_max=self.actor_updates_num,
             eta_min=self.actor_lr_end
         )
 

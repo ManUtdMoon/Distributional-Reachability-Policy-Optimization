@@ -8,8 +8,7 @@ from .env.batch import ProductEnv
 from .env.util import env_dims, get_max_episode_steps
 from .log import default_log as log, TabularLog
 from .policy import UniformPolicy
-from .sampling import sample_episodes_batched
-from .shared import SafetySampleBuffer
+from .sampling import sample_episodes_batched, SafetySampleBuffer
 from .ssac import SSAC
 from .torch_util import Module, DummyModuleWrapper, device, torchify, random_choice, gpu_mem_info, deciles
 from .util import pythonic_mean, batch_map
@@ -37,22 +36,31 @@ class SMBPO(Configurable, Module):
         real_fraction = 0.1
         action_clip_gap = 1e-6  # for clipping to promote numerical instability in logprob
         reward_scale = 1.
+        mode = 'train'
 
-    def __init__(self, config, env_factory, data):
+    def __init__(self, config, env_factory, data, epochs):
         Configurable.__init__(self, config)
         Module.__init__(self)
         self.data = data
         self.episode_log = TabularLog(log.dir, 'episodes.csv')
 
         self.real_env = env_factory()
-        self.eval_env = ProductEnv([env_factory() for _ in range(N_EVAL_TRAJ)])
-        self.state_dim, self.action_dim = env_dims(self.real_env)
+        if self.mode == 'train':
+            self.eval_env = ProductEnv([env_factory(id=i) for i in range(N_EVAL_TRAJ)])
+        elif self.mode == 'test':
+            self.eval_env = ProductEnv([env_factory(id=i) for i in range(1)])
+        else:
+            log.message(f'Invalid SMBPO mode')
+
+        self.state_dim, self.action_dim, self.con_dim = env_dims(self.real_env)
 
         self.check_done = lambda states: torchify(self.real_env.check_done(states.cpu().numpy()))
         self.check_violation = lambda states: torchify(self.real_env.check_violation(states.cpu().numpy()))
 
-        self.solver = SSAC(self.sac_cfg, self.state_dim, self.action_dim, self.horizon)
         self.model_ensemble = BatchedGaussianEnsemble(self.model_cfg, self.state_dim, self.action_dim)
+        self.solver = SSAC(self.sac_cfg, self.state_dim, self.action_dim, self.con_dim, 
+                           self.horizon, epochs, self.steps_per_epoch, self.solver_updates_per_step,
+                           env_factory, self.model_ensemble)
 
         self.replay_buffer = self._create_buffer(self.buffer_max)
         self.virt_buffer = self._create_buffer(self.buffer_max)
@@ -112,7 +120,7 @@ class SMBPO(Configurable, Module):
                 episode_safe = not episode.get('violations').any()
                 self.episodes_sampled += 1
                 if not episode_safe:
-                    self.n_violations += 1
+                    self.n_violations += episode.get('violations').sum()
 
                 self._log_tabular({
                     'episodes sampled': self.episodes_sampled.item(),
@@ -134,6 +142,17 @@ class SMBPO(Configurable, Module):
                 episode = self._create_buffer(max_episode_steps)
                 state = self.real_env.reset()
             else:
+                if self.steps_sampled % max_episode_steps == 0:
+                    self._log_tabular({
+                        'episodes sampled': self.episodes_sampled.item(),
+                        'total violations': self.n_violations.item(),
+                        'steps sampled': self.steps_sampled.item(),
+                        'collect return': None,
+                        'collect return (+bonus)': None,
+                        'collect length': None,
+                        'collect safe': None,
+                        # **self.evaluate()
+                    })
                 state = next_state
 
             yield t
@@ -149,8 +168,8 @@ class SMBPO(Configurable, Module):
         log.message(f'\tDeciles: {deciles(model_losses)}')
 
         buffer_rewards = self.replay_buffer.get('rewards')
-        r_min = buffer_rewards.min().item() + self.alive_bonus
-        r_max = buffer_rewards.max().item() + self.alive_bonus
+        r_min = buffer_rewards.min().item() * self.reward_scale + self.alive_bonus
+        r_max = buffer_rewards.max().item() * self.reward_scale + self.alive_bonus
         self.solver.update_r_bounds(r_min, r_max)
 
     def rollout(self, policy, initial_states=None):
@@ -166,7 +185,7 @@ class SMBPO(Configurable, Module):
             violations = self.check_violation(next_states)
             buffer.extend(states=states, actions=actions, next_states=next_states,
                           rewards=rewards, dones=dones, violations=violations)
-            continues = ~(dones)
+            continues = ~(dones | violations)
             if continues.sum() == 0:
                 break
             states = next_states[continues]
@@ -186,8 +205,7 @@ class SMBPO(Configurable, Module):
         # reward preprocess
         REWARD_INDEX = 3
         assert combined_samples[REWARD_INDEX].ndim == 1
-        if self.reward_scale != 0:
-            combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] * self.reward_scale
+        combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] * self.reward_scale
         if self.alive_bonus != 0:    
             combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] + self.alive_bonus
 
@@ -199,8 +217,12 @@ class SMBPO(Configurable, Module):
 
     def rollout_and_update(self):
         self.rollout(self.actor)
-        for _ in range(self.solver_updates_per_step):
-            self.update_solver()
+        for step in range(self.solver_updates_per_step):
+            update_actor = True if step % self.sac_cfg.actor_update_interval == 0 else \
+                           False
+            self.update_solver(
+                update_actor=update_actor
+            )
 
     def setup(self):
         if self.save_trajectories:
@@ -239,11 +261,12 @@ class SMBPO(Configurable, Module):
     def evaluate_models(self):
         states, actions, next_states = self.replay_buffer.get('states', 'actions', 'next_states')
         state_std = states.std(dim=0)
+        state_std[state_std<1e-7] = 1.0
         with torch.no_grad():
             predicted_states = batch_map(lambda s, a: self.model_ensemble.means(s, a)[0],
                                          [states, actions], cat_dim=1)
         for i in range(self.model_cfg.ensemble_size):
-            errors = torch.norm((predicted_states[i] - next_states) / state_std, dim=1)
+            errors = torch.norm((predicted_states[i] - next_states) / (state_std + 1e-7), dim=1)
             log.message(f'Model {i+1} error deciles: {deciles(errors)}')
 
     def log_statistics(self):
@@ -289,9 +312,13 @@ class SMBPO(Configurable, Module):
         returns = [traj.get('rewards').sum().item() for traj in eval_traj]
         return_mean, return_std = float(np.mean(returns)), float(np.std(returns))
 
+        violations = [traj.get('violations').sum().item() for traj in eval_traj]
+        violation_mean = float(np.mean(violations))
+
         return {
             'eval return mean': return_mean,
             'eval return std': return_std,
             'eval length mean': length_mean,
-            'eval length std': length_std
+            'eval length std': length_std,
+            'eval violation mean': violation_mean
         }

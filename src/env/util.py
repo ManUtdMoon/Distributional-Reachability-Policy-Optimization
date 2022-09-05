@@ -19,7 +19,7 @@ def space_dim(space):
 
 
 def env_dims(env):
-    return (space_dim(env.observation_space), space_dim(env.action_space))
+    return (space_dim(env.observation_space), space_dim(env.action_space), env.con_dim)  # todo:add con_dim in pendulum
 
 
 def get_max_episode_steps(env):

@@ -212,6 +212,22 @@ class SampleBuffer(Module):
                 f.create_dataset(k, data=v.numpy())
 
 
+class SafetySampleBuffer(SampleBuffer):
+    COMPONENT_NAMES = (*SampleBuffer.COMPONENT_NAMES, 'violations')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._create_buffer('violations', torch.bool, [])
+
+class ConstraintSafetySampleBuffer(SafetySampleBuffer):
+    COMPONENT_NAMES = (*SafetySampleBuffer.COMPONENT_NAMES, 'constraint_values')
+
+    def __init__(self, *args, **kwargs):
+        con_dim = kwargs.pop('con_dim')
+        super().__init__(*args, **kwargs)
+        con_val_dim = [] if con_dim == 1 else [con_dim]
+        self._create_buffer('constraint_values', torch.float, con_val_dim)
+
 
 def concat_sample_buffers(buffers):
     state_dim, action_dim = buffers[0].state_dim, buffers[0].action_dim
@@ -372,10 +388,10 @@ def sample_episodes_batched(env, policy, n_traj, eval=False):
     if not isinstance(env, BaseBatchedEnv):
         env = ProductEnv([env])
 
-    state_dim, action_dim = env_dims(env)
+    state_dim, action_dim, con_dim = env_dims(env)
     discrete_actions = isdiscrete(env.action_space)
-    traj_buffer_factory = lambda: SampleBuffer(state_dim, 1 if discrete_actions else action_dim, env._max_episode_steps,
-                                               discrete_actions=discrete_actions)
+    traj_buffer_factory = lambda: SafetySampleBuffer(state_dim, 1 if discrete_actions else action_dim, env._max_episode_steps,
+                                                     discrete_actions=discrete_actions)
     traj_buffers = [traj_buffer_factory() for _ in range(env.n_envs)]
     complete_episodes = []
 
@@ -383,13 +399,14 @@ def sample_episodes_batched(env, policy, n_traj, eval=False):
     while True:
         actions = policy.act(states, eval=eval)
         next_states, rewards, dones, infos = env.step(actions)
+        violations = [info['violation'] for info in infos]
 
         _next_states = next_states.clone()
         reset_indices = []
 
         for i in range(env.n_envs):
             traj_buffers[i].append(states=states[i], actions=actions[i], next_states=next_states[i],
-                                   rewards=rewards[i], dones=dones[i])
+                                   rewards=rewards[i], dones=dones[i], violations=violations[i])
             if dones[i] or len(traj_buffers[i]) == env._max_episode_steps:
                 complete_episodes.append(traj_buffers[i])
                 if len(complete_episodes) == n_traj:

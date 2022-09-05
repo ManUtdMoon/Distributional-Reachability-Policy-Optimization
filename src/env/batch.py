@@ -23,6 +23,10 @@ class BaseBatchedEnv(gym.Env, ABC):
     def action_space(self):
         return self.proto_env.action_space
 
+    @property
+    def con_dim(self):
+        return self.proto_env.con_dim
+
     @abstractmethod
     def _reset_index(self, index):
         pass

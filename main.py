@@ -26,9 +26,9 @@ class Config(BaseConfig):
 
 
 def main(cfg):
-    env_factory = lambda: get_env(cfg.env_name, **cfg.env_cfg)
+    env_factory = lambda id=None: get_env(cfg.env_name, **{**cfg.env_cfg, **dict(id=id)})
     data = CheckpointableData()
-    alg = SMBPO(cfg.alg_cfg, env_factory, data)
+    alg = SMBPO(cfg.alg_cfg, env_factory, data, cfg.epochs)
     alg.to(device)
     checkpointer = Checkpointer(alg, log.dir, 'ckpt_{}.pt')
     data_checkpointer = Checkpointer(data, log.dir, 'data.pt')

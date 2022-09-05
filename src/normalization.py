@@ -16,7 +16,9 @@ class Normalizer(Module):
         assert X.dim() == 2
         assert X.shape[1] == self.dim
         self.mean.data.copy_(X.mean(dim=0))
-        self.std.data.copy_(X.std(dim=0))
+        std = X.std(dim=0)
+        std[std<1e-6] = 1.0
+        self.std.data.copy_(std)
 
     def forward(self, x):
         return (x - self.mean) / (self.std + self.epsilon)

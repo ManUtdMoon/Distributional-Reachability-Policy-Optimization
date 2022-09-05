@@ -11,6 +11,7 @@ from .config import BaseConfig, Configurable
 from .normalization import Normalizer
 from .train import epochal_training
 from .torch_util import device, Module, mlp
+from src.log import default_log as log
 
 
 class BaseModel(ABC):
@@ -53,16 +54,18 @@ class BatchedLinear(nn.Module):
 
 class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
     class Config(BaseConfig):
-        ensemble_size = 5
+        ensemble_size = 7
+        num_elites = 5
         hidden_dim = 200
         trunk_layers = 2
         head_hidden_layers = 1
-        activation = 'relu'
+        activation = 'swish'
         init_min_log_var = -10.0
         init_max_log_var = 1.0
         log_var_bound_weight = 0.01
         batch_size = 256
         learning_rate = 1e-3
+        holdout_size = 256
 
     def __init__(self, config, state_dim, action_dim,
                  device=device, optimizer_factory=defaults.OPTIMIZER):
@@ -86,14 +89,21 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
         self.diff_head = mlp(head_dims, layer_factory=layer_factory, activation=self.activation)
         self.log_var_head = mlp(head_dims, layer_factory=layer_factory, activation=self.activation)
         self.to(device)
-        self.optimizer = optimizer_factory([
-            *self.trunk.parameters(),
-            *self.diff_head.parameters(),
-            *self.log_var_head.parameters(),
-            self.min_log_var, self.max_log_var
-        ], lr=self.learning_rate,
-        weight_decay=1e-4)
+        self.optimizer = optimizer_factory(
+            [
+                *self.trunk.parameters(),
+                *self.diff_head.parameters(),
+                *self.log_var_head.parameters(),
+                self.min_log_var, self.max_log_var
+            ],
+            lr=self.learning_rate,
+            weight_decay=1e-4
+        )
 
+        self._init_elites()
+    
+    def _init_elites(self):
+        self.elite_inds = torch.randint(high=self.ensemble_size, size=(self.num_elites,)).tolist()
 
     @property
     def total_batch_size(self):
@@ -139,12 +149,8 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
             inputs = [x[:nearest] for x in inputs]
 
         states, actions, targets = [self._rebatch(x) for x in inputs]
-        means, log_vars = self._forward_all(states, actions)
-        inv_vars = torch.exp(-log_vars)
-        squared_errors = torch.sum((targets - means)**2 * inv_vars, dim=-1)
-        log_dets = torch.sum(log_vars, dim=-1)
-        mle_loss = torch.mean(squared_errors + log_dets)
-        return mle_loss + self.log_var_bound_weight * (self.max_log_var.sum() - self.min_log_var.sum())
+        mse_losses = torch.sum(self._mse_loss(states, actions, targets))
+        return mse_losses + self.log_var_bound_weight * (self.max_log_var.sum() - self.min_log_var.sum())
 
     def fit(self, buffer, steps=None, epochs=None, progress_bar=False, **kwargs):
         n = len(buffer)
@@ -163,6 +169,21 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+            
+            # get holdout samples; holdout losses; decide the elites
+            holdout_indices = torch.randint(n, [self.holdout_size], device=device)
+            holdout_indices = holdout_indices.repeat(self.ensemble_size, 1)
+            assert states[holdout_indices].shape == (self.ensemble_size, self.batch_size, self.state_dim)
+            mse_losses = self._mse_loss(states[holdout_indices],
+                                        actions[holdout_indices],
+                                        targets[holdout_indices],
+                                        enable_grad=False)
+            sorted_inds = torch.argsort(mse_losses)
+            self._elite_inds = sorted_inds[:self.num_elites].tolist()
+            log.message(f'Using {self.num_elites} / {self.ensemble_size} models: {self._elite_inds}')
+            log.message(f'Holdout losses: {[round(loss, 4) for loss in mse_losses.tolist()]}')
+
+            # ----- elites selection done ----- #
             return losses
         elif epochs is not None:
             # Because of the batching, each model only sees about 1/ensemble_size fraction of the data per epoch.
@@ -175,7 +196,7 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
             raise ValueError('Must pass steps or epochs')
 
     def sample(self, states, actions):
-        index = random.randrange(self.ensemble_size)
+        index = random.choice(self._elite_inds)
         means, log_vars = self._forward1(states, actions, index)
         stds = torch.exp(log_vars).sqrt()
         samples = means + stds * torch.randn_like(means)
@@ -193,6 +214,43 @@ class BatchedGaussianEnsemble(Configurable, Module, BaseModel):
         next_state_means, reward_means = self.means(states, actions)
         return next_state_means.mean(dim=0), reward_means.mean(dim=0)
 
+    # Get samples of all models
+    def elite_samples(self, states, actions):
+        """Get samples in the shape of (ensemble_size = E, B, d_s)
+        params:
+            states: (B, d_s)
+            actions: (B, d_a)
+        return:
+            next_states: (E, B, d_s)
+            next_rewards: (E, B,)
+        """
+        states = states.repeat(self.ensemble_size, 1, 1)
+        actions = actions.repeat(self.ensemble_size, 1, 1)
+        means, log_vars = self._forward_all(states, actions)
+        means = means[self._elite_inds, ...]
+        log_vars = log_vars[self._elite_inds, ...]
+        stds = torch.exp(log_vars).sqrt()
+        samples = means + stds * torch.randn_like(means)
+        return samples[:, :, :-1], samples[:, :, -1]        
+
+    def _mse_loss(self, states, actions, targets, enable_grad=True):
+        if enable_grad:
+            means, log_vars = self._forward_all(states, actions)
+            inv_vars = torch.exp(-log_vars)
+            squared_errors = torch.mean((targets - means)**2 * inv_vars, dim=(-2, -1))
+            log_dets = torch.mean(log_vars, dim=(-2, -1))
+            mle_loss = squared_errors + log_dets
+            assert mle_loss.shape[0] == self.ensemble_size and len(mle_loss.shape) == 1
+            return mle_loss
+        else:
+            with torch.no_grad():
+                means, log_vars = self._forward_all(states, actions)
+                inv_vars = torch.exp(-log_vars)
+                squared_errors = torch.mean((targets - means)**2 * inv_vars, dim=(-2, -1))
+                log_dets = torch.mean(log_vars, dim=(-2, -1))
+                mle_loss = squared_errors + log_dets
+                assert mle_loss.shape[0] == self.ensemble_size
+                return mle_loss
 
 
 # Special forward for nn.Sequential modules which contain BatchedLinear layers,
