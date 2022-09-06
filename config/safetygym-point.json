@@ -1,0 +1,22 @@
+{
+    "env_name": "safetygym-point",
+    "env_cfg": {
+      "robot_type": "point"
+    },
+    "alg_cfg": {
+      "sac_cfg": {
+        "target_entropy": -2.0
+      },
+      "steps_per_epoch": 1000,
+      "model_update_period": 250,
+      "model_initial_steps": 10000,
+      "model_steps": 1000,
+      "buffer_min": 5000,
+      "buffer_max": 500000,
+      "reward_scale": 50.0,
+      "alive_bonus": 0.0,
+      "constraint_scale": 100.0,
+      "constraint_offset": 0.5
+    },
+    "epochs": 100
+  }
