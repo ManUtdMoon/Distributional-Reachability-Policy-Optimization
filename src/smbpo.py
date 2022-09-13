@@ -39,7 +39,7 @@ class SMBPO(Configurable, Module):
         mode = 'train'
 
         constraint_scale = 100.0
-        constraint_offset = 0.5
+        constraint_offset = 0.
 
     def __init__(self, config, env_factory, data, epochs):
         Configurable.__init__(self, config)

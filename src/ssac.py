@@ -52,8 +52,8 @@ class SSAC(BasePolicy, Module):
         use_log_alpha_loss = False
         deterministic_backup = False
         critic_update_multiplier = 1
-        actor_lr = ACTOR_LR
-        actor_lr_end = 5e-5
+        actor_lr = 8e-5
+        actor_lr_end = 4e-5
         critic_lr = 3e-4
         critic_lr_end = 8e-5
         critic_cfg = CriticEnsemble.Config()
