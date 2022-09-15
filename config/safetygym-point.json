@@ -15,7 +15,8 @@
       "buffer_max": 500000,
       "reward_scale": 50.0,
       "alive_bonus": 0.0,
-      "constraint_scale": 100.0
+      "constraint_scale": 10.0,
+      "constraint_offset": 0.5
     },
     "epochs": 100
   }
