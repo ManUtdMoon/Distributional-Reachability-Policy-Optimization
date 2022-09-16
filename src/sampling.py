@@ -122,7 +122,7 @@ class SampleBuffer(Module):
         assert set(kwargs.keys()) == set(self.COMPONENT_NAMES)
         i = self._pointer % self.capacity
         for name in self.COMPONENT_NAMES:
-            self._bufs[name][i] = kwargs[name]
+            self._bufs[name][i] = torchify(kwargs[name])
         self._pointer += 1
 
     def extend(self, **kwargs):
@@ -228,6 +228,12 @@ class ConstraintSafetySampleBuffer(SafetySampleBuffer):
         con_val_dim = [] if con_dim == 1 else [con_dim]
         self._create_buffer('constraint_values', torch.float, con_val_dim)
 
+class GoalConstraintSafetyBuffer(ConstraintSafetySampleBuffer):
+    COMPONENT_NAMES = (*ConstraintSafetySampleBuffer.COMPONENT_NAMES, 'goal_mets')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._create_buffer('goal_mets', torch.bool, [])
 
 def concat_sample_buffers(buffers):
     state_dim, action_dim = buffers[0].state_dim, buffers[0].action_dim
@@ -384,7 +390,7 @@ def sample_episode_unbatched(env, policy, eval=False,
     return episode
 
 
-def sample_episodes_batched(env, policy, n_traj, eval=False, safe_shield_threshold=-0.1):
+def sample_episodes_batched(env, policy, n_traj, eval=False):
     if not isinstance(env, BaseBatchedEnv):
         env = ProductEnv([env])
 
@@ -407,6 +413,7 @@ def sample_episodes_batched(env, policy, n_traj, eval=False, safe_shield_thresho
 
         next_states, rewards, dones, infos = env.step(actions)
         violations = [info['violation'] for info in infos]
+        rewards = [reward + float(infos[i].get('goal_met', False)) for i, reward in enumerate(rewards)]
 
         _next_states = next_states.clone()
         reset_indices = []

@@ -4,17 +4,9 @@ PARENT_DIR=$(cd $(dirname $0);cd ..; pwd)
 export PYTHONPATH=$PYTHONPATH:$PARENT_DIR
 
 # quadrotor cartpole-move
-python main.py -c config/quadrotor-mbpol.json \
-    -s seed 64578
-python main.py -c config/quadrotor-csc.json \
-    -s seed 64578
-
-python main.py -c config/quadrotor-mbpol.json \
-    -s seed 219803
-python main.py -c config/quadrotor-csc.json \
-    -s seed 219803
-
-python main.py -c config/quadrotor-mbpol.json \
-    -s seed 456
-python main.py -c config/quadrotor-csc.json \
-    -s seed 456
+for i in 1 43567 7346588 789 49283
+do
+    python main.py -c config/safetygym-car.json \
+        -s seed $i \
+        -s alg_cfg.sac_cfg.enable_csc True
+done
