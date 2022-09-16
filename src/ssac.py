@@ -158,7 +158,7 @@ class SSAC(BasePolicy, Module):
 
         # conservative safety critic
         enable_csc = False
-        csc_weight_coefficient = 0.5
+        csc_weight_coefficient = 0.05
 
     def __init__(self, config, state_dim, action_dim, con_dim, 
                  horizon, epochs, steps_per_epoch, solver_updates_per_step,

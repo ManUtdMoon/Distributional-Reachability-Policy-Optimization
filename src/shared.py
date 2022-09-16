@@ -23,9 +23,9 @@ def get_env(env_name, wrap_torch=True, **kwargs):
         'cartpole-move': SafeInvertedPendulumEnv,
         'quadrotor': QuadrotorWrapperEnv
     }
-    if env_name != 'quadrotor':
-        assert 'id' in kwargs.keys()
-        kwargs.pop('id')  # the keyword arg 'mode' is only valid for quadrotor env
+    # if env_name != 'quadrotor':
+    #     assert 'id' in kwargs.keys()
+    #     kwargs.pop('id')  # the keyword arg 'mode' is only valid for quadrotor env
 
     env = envs[env_name](**kwargs)
     if not (np.all(env.action_space.low == -1.0) and np.all(env.action_space.high == 1.0)):

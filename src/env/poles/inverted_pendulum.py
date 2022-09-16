@@ -8,7 +8,7 @@ from .constraints import BoundedConstraint, ConstrainedVariableType
 
 class SafeInvertedPendulumEnv(InvertedPendulumEnv):
 
-    def __init__(self, threshold=0.2, task='upright'):
+    def __init__(self, threshold=0.2, task='upright', id=None):
         self.task = task
         self.th_threshold = threshold
         self.th_margin = 0.1
@@ -37,6 +37,7 @@ class SafeInvertedPendulumEnv(InvertedPendulumEnv):
         self.con_dim = 4  # lb & ub
 
         self._max_episode_steps = 1000
+        self.done_on_violation = (id is None)
         super().__init__()
         EzPickle.__init__(self, threshold=threshold, task=task)  # deepcopy calls `get_state`
 
@@ -71,7 +72,7 @@ class SafeInvertedPendulumEnv(InvertedPendulumEnv):
             constraint_value=constraint_value
         )
 
-        done = np.any(self._constraint_values(next_state) > 0.).item()
+        done = violation if self.done_on_violation else self.soft_constraints.is_violated(next_state)
 
         return next_state, reward, done, info
 
