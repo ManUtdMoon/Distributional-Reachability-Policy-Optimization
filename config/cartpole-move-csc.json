@@ -1,0 +1,30 @@
+{
+  "env_name": "cartpole-move",
+  "env_cfg": {
+    "task": "move"
+  },
+  "alg_cfg": {
+    "sac_cfg": {
+      "target_entropy": -1.0,
+      "constraint_threshold": 0.0,
+      "mlp_multiplier": false,
+      "penalty_lb": -5.0,
+      "penalty_ub": 100.0,
+      "constrained_fcn": "cost",
+      "enable_csc": true,
+      "csc_weight_coefficient": 0.05
+    },
+    "steps_per_epoch": 1000,
+    "model_update_period": 250,
+    "model_initial_steps": 2000,
+    "model_steps": 1000,
+    "buffer_min": 1000,
+    "reward_scale": 1.0,
+    "alive_bonus": 0.0,
+    "constraint_scale": 100.0,
+    "safe_shield": false,
+    "real_fraction": 1.0,
+    "horizon": 1
+  },
+  "epochs": 50
+}
