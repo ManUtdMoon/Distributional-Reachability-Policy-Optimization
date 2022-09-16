@@ -493,7 +493,9 @@ class SMBPO(Configurable, Module):
 
     def evaluate(self):
         eval_traj = sample_episodes_batched(self.eval_env, self.solver, N_EVAL_TRAJ, 
-                                            eval=True, safe_shield_threshold=self.eval_shield_threshold)
+                                            eval=True,
+                                            safe_shield_threshold=self.eval_shield_threshold,
+                                            shield_type=self.eval_shield_type)
 
         lengths = [len(traj) for traj in eval_traj]
         length_mean, length_std = float(np.mean(lengths)), float(np.std(lengths))
