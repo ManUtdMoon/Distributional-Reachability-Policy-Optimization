@@ -131,3 +131,4 @@ dmypy.json
 # new
 /logs/*
 /.idea/*
+/viz_curves/
