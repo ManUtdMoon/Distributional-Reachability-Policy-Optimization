@@ -48,7 +48,7 @@ class ConstraintCritic(Configurable, Module):
         trunk_layers = 2
         head_layers = 1
         hidden_dim = 256
-        log_std_min = -3.
+        log_std_min = -4.
         log_std_max = 4.
         std_ratio = 2. # 1 2 3, shift how many stds
 

@@ -13,10 +13,10 @@
         "upper_bound": 50.0
       },
       "constraint_critic_cfg": {
-        "std_ratio": 1.0
+        "std_ratio": 2.0
       },
       "actor_lr": 1e-4,
-      "actor_lr_end": 5e-5,
+      "actor_lr_end": 4e-5,
       "qc_under_uncertainty": false,
       "distributional_qc": false
     },
