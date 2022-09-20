@@ -183,21 +183,6 @@ class SMBPO(Configurable, Module):
             # -------------- reward & constraint value preprocess -------------- #
             if self.reward_scale != 0:
                 buf_reward = reward * self.reward_scale
-
-            buf_constraint_value = torch.where(
-                constraint_value > 0,
-                constraint_value * self.constraint_scale + self.constraint_offset,
-                constraint_value
-            )
-
-            # Modify the last dimension of states, i.e. the learned constrained value
-            # to avoid small values hindering faster learning, must correspond to the 
-            # buf_constrain_value calculation above
-            assert len(state.shape) == len(next_state.shape) == 1
-            if state[-1] > 0:
-                state[-1] = state[-1] * self.constraint_scale + self.constraint_offset
-            if next_state[-1] > 0:
-                next_state[-1] = next_state[-1] * self.constraint_scale + self.constraint_offset
             # -------------- reward & constraint value preprocess -------------- #
 
             goal_met = ('goal_met' in info_keys)
@@ -215,7 +200,7 @@ class SMBPO(Configurable, Module):
                            constraint_values=constraint_value, goal_mets=goal_met)
             self.replay_buffer.append(states=state, actions=action, next_states=next_state,
                                       rewards=buf_reward, dones=done or goal_met, violations=violation,
-                                      constraint_values=buf_constraint_value, goal_mets=goal_met)
+                                      constraint_values=constraint_value, goal_mets=goal_met)
             self.steps_sampled += 1
 
             if done or (len(episode) == max_episode_steps):
@@ -323,9 +308,9 @@ class SMBPO(Configurable, Module):
         if self.alive_bonus != 0:    
             combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] + self.alive_bonus
         CONSTRAINT_VALUE_INDEX = 6
-        # combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] * self.constraint_scale
-        # combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] + \
-        #     (combined_samples[CONSTRAINT_VALUE_INDEX]>0).float() * self.constraint_offset
+        combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] * self.constraint_scale
+        combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] + \
+            (combined_samples[CONSTRAINT_VALUE_INDEX]>0).float() * self.constraint_offset
 
         # learning
         critic_loss, constraint_critic_loss = solver.update_critic(*combined_samples)

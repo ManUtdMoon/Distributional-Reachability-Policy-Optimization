@@ -20,7 +20,7 @@ class SafetyGymWrapper(Wrapper):
         env_cfg = deepcopy(env_cfg_dict[robot_type])
         env = SimpleEngine(env_cfg)
         super().__init__(env)
-        self.done_on_violation = (id is None)  # train: done on violation; eval: false
+
         self._max_episode_steps = self.num_steps
 
         self.con_dim = 1
@@ -77,9 +77,8 @@ class SafetyGymWrapper(Wrapper):
         )
         self.info = new_info
 
-        # if next_state[-1] >= self.margin_scale * self.env.hazards_size:
-        #     done = True
-        if (next_state[-1] > 0) and self.done_on_violation: done = True
+        if next_state[-1] >= self.margin_scale * self.env.hazards_size:
+            done = True
 
         return next_state, rew, done, new_info
 
@@ -115,7 +114,7 @@ class SafetyGymWrapper(Wrapper):
             states = states[np.newaxis, ...]
         assert len(states.shape) >= 2
 
-        return states[..., -1] > 0  # self.margin_scale * self.env.hazards_size
+        return states[..., -1] >= self.margin_scale * self.env.hazards_size
 
     def check_violation(self, states: np.array):
         '''Compute whether the constraints are violated
