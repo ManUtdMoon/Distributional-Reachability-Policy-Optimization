@@ -156,6 +156,9 @@ class SSAC(BasePolicy, Module):
         qc_td_bound = 5.
         distributional_qc = True
 
+        # ablation_framework h-params
+        enable_switch = False
+
     def __init__(self, config, state_dim, action_dim, con_dim, 
                  horizon, epochs, steps_per_epoch, solver_updates_per_step,
                  constraint_scale, env_factory, model_ensemble,
@@ -462,24 +465,25 @@ class SSAC(BasePolicy, Module):
         uncstr_actor_loss = torch.mean(alpha.detach() * log_prob - actor_Q)
 
         # ----- constrained part ----- #
-        if self.constrained_fcn == 'reachability':
-            actor_Qc_ub_con_dim = self.constraint_critic(obs, action, uncertainty=self.distributional_qc)
-            actor_Qc = self._get_qc(actor_Qc_ub_con_dim)
-            # actor_Qc = actor_Qc + (actor_Qc>0).float() * self.penalty_offset
-        else:
-            actor_Qc = self.constraint_critic(obs, action)
-        if self.mlp_multiplier:
-            with torch.no_grad():
-                action_safe = self.actor_safe.act(obs, eval=True)
-                safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
-                # lams = torch.max(self.multiplier(obs, action), (actor_Qc>0)*19.0).detach()
-                lams = self.multiplier(obs, safe_Qc)
-            assert lams.shape == actor_Qc.shape
-        else:
-            # lams = self.lam.detach()
-            lams = self.fixed_multiplier
-            actor_Qc = torch.clamp(actor_Qc, min=self.penalty_lb, max=self.penalty_ub)
-        cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
+        if not self.enable_switch:
+            if self.constrained_fcn == 'reachability':
+                actor_Qc_ub_con_dim = self.constraint_critic(obs, action, uncertainty=self.distributional_qc)
+                actor_Qc = self._get_qc(actor_Qc_ub_con_dim)
+                # actor_Qc = actor_Qc + (actor_Qc>0).float() * self.penalty_offset
+            else:
+                actor_Qc = self.constraint_critic(obs, action)
+            if self.mlp_multiplier:
+                with torch.no_grad():
+                    action_safe = self.actor_safe.act(obs, eval=True)
+                    safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
+                    # lams = torch.max(self.multiplier(obs, action), (actor_Qc>0)*19.0).detach()
+                    lams = self.multiplier(obs, safe_Qc)
+                assert lams.shape == actor_Qc.shape
+            else:
+                # lams = self.lam.detach()
+                lams = self.fixed_multiplier
+                actor_Qc = torch.clamp(actor_Qc, min=self.penalty_lb, max=self.penalty_ub)
+            cstr_actor_loss = torch.mean(torch.mul(lams, actor_Qc))
         # ----- constrained part end ----- #
 
         # ----- safe actor loss ----- #
@@ -491,7 +495,10 @@ class SSAC(BasePolicy, Module):
             actor_safe_loss = torch.mean(actor_safe_Qc)
         # ----- safe actor loss end ----- #
 
-        actor_loss = uncstr_actor_loss + cstr_actor_loss
+        if self.enable_switch:
+            actor_loss = uncstr_actor_loss
+        else:
+            actor_loss = uncstr_actor_loss + cstr_actor_loss
         losses = [actor_loss]
         if include_alpha:
             alpha_coefficient = self.log_alpha if self.use_log_alpha_loss else alpha
@@ -544,10 +551,10 @@ class SSAC(BasePolicy, Module):
             action_safe = self.actor_safe.act(obs, eval=True)
             with torch.no_grad():
                 safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
-            lams = self.multiplier(obs, safe_Qc)
+            lams = self.multiplier(obs, actor_Qc.detach())
             assert lams.shape == penalty.shape
-            lams_safe = torch.mul(safe_Qc<=0, lams)
-            lams_unsafe = torch.mul(safe_Qc>0, lams)
+            lams_safe = torch.mul(actor_Qc<=0, lams)
+            lams_unsafe = torch.mul(actor_Qc>0, lams)
             
             '''Special lam loss
             For safe states, learn their lam: 0 or finite vlaues
@@ -557,7 +564,7 @@ class SSAC(BasePolicy, Module):
             lam_loss = -0.5 * torch.mean(torch.mul(lams_safe, penalty.detach())) + \
                        self.criterion(
                            lams_unsafe,
-                           (safe_Qc>0) * (self.mlp_multiplier_cfg.upper_bound - self.lam_epsilon)
+                           (actor_Qc>0) * (self.mlp_multiplier_cfg.upper_bound - self.lam_epsilon)
                        )
         else:
             lams = self.lam
@@ -566,6 +573,8 @@ class SSAC(BasePolicy, Module):
         return lam_loss
 
     def update_multiplier(self, obs):
+        if self.enable_switch:
+            return 0
         losses = self.multiplier_loss(obs)
         self.multiplier_optimizer.zero_grad()
         losses.backward()

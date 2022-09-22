@@ -14,8 +14,8 @@
           "upper_bound": 100.0
         },
         "constraint_critic_cfg": {
-          "std_ratio": 1.0,
-          "log_std_min": -2.0
+          "std_ratio": 2.0,
+          "log_std_min": -3.0
         }
       },
       "steps_per_epoch": 1000,
