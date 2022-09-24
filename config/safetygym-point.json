@@ -14,8 +14,8 @@
           "upper_bound": 300.0
         },
         "constraint_critic_cfg": {
-          "std_ratio": 1.0,
-          "log_std_min": -2.0
+          "std_ratio": 2.0,
+          "log_std_min": -4.0
         }
       },
       "steps_per_epoch": 1000,
@@ -27,9 +27,10 @@
       "reward_scale": 50.0,
       "alive_bonus": 0.0,
       "safe_shield": true,
-      "safe_shield_threshold": -0.2,
-      "eval_shield_threshold": -0.2,
-      "constraint_scale": 10.0
+      "safe_shield_threshold": -0.05,
+      "eval_shield_threshold": -0.05,
+      "constraint_scale": 10.0,
+      "constraint_offset": 0.5
     },
     "epochs": 100
   }

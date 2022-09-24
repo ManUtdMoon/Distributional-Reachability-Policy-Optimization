@@ -158,6 +158,7 @@ class SSAC(BasePolicy, Module):
 
         # ablation_framework h-params
         enable_switch = False
+        enable_pi_qc = False
 
     def __init__(self, config, state_dim, action_dim, con_dim, 
                  horizon, epochs, steps_per_epoch, solver_updates_per_step,
@@ -338,7 +339,8 @@ class SSAC(BasePolicy, Module):
                 """
                 if self.qc_under_uncertainty:
                     if self.distributional_qc:
-                        distr = self.actor_safe.distr(next_obs)
+                        actor = self.actor if self.enable_pi_qc else self.actor_safe
+                        distr = actor.distr(next_obs)
                         next_action = distr.sample()
                         _, _, next_qc_sample = self.constraint_critic_target(
                             next_obs, next_action, sample=True
@@ -362,29 +364,6 @@ class SSAC(BasePolicy, Module):
                             value_shape
                         return target_qc_unbounded, target_qc_bounded
                     else:
-                        # we denote elite_batch_sth. as en_ba_sth. for short
-                        # ----- start: robust Qc: choose the largest Qc ----- #
-                        # en_ba_next_obs, _ = self.model_ensemble.elite_samples(obs, action)
-                        # en_ba_done = self.check_done(en_ba_next_obs)  # (E, B)
-                        # en_ba_distr = self.actor_safe.distr(en_ba_next_obs)
-                        # en_ba_next_act = en_ba_distr.sample()  # (E, B, d_a)
-                        # en_ba_next_qc = self.constraint_critic_target(
-                        #     en_ba_next_obs, en_ba_next_act
-                        # )  # (E, B, con_dim)
-                        
-                        # en_ba_con_value = constraint_value.repeat(self.model_ensemble.num_elites, 1, 1)
-                        # en_ba_qc_nonterminal = (1 - self.discount) * constraint_value +\
-                        #                             self.discount * torch.maximum(constraint_value, en_ba_next_qc)
-
-                        # en_ba_dones = en_ba_done.tile((self.con_dim, 1, 1)).permute(1, 2, 0)  # (E, B, con_dim)
-                        # assert en_ba_qc_nonterminal.shape == en_ba_con_value.shape == en_ba_dones.shape ==\
-                        #     (self.model_ensemble.num_elites, self.batch_size, self.con_dim)
-
-                        # en_ba_qc = torch.where(en_ba_dones, en_ba_con_value, en_ba_qc_nonterminal)  # (E, B, con_dim)
-                        # qc = torch.topk(en_ba_qc, k=2, dim=0)[0][-1]  # (B, con_dim)
-                        # assert qc.shape == (self.batch_size, self.con_dim)
-                        # ----- end ----- #
-                        
                         # ----- start: robust Qc: select a model randomly----- #
                         next_obs, _ = self.model_ensemble.sample(obs, action)
                         ba_done = self.check_done(next_obs)  # (B)
@@ -474,10 +453,9 @@ class SSAC(BasePolicy, Module):
                 actor_Qc = self.constraint_critic(obs, action)
             if self.mlp_multiplier:
                 with torch.no_grad():
-                    action_safe = self.actor_safe.act(obs, eval=True)
-                    safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
-                    # lams = torch.max(self.multiplier(obs, action), (actor_Qc>0)*19.0).detach()
-                    lams = self.multiplier(obs, safe_Qc)
+                    # action_safe = self.actor_safe.act(obs, eval=True)
+                    # safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
+                    lams = self.multiplier(obs, actor_Qc.detach())
                 assert lams.shape == actor_Qc.shape
             else:
                 # lams = self.lam.detach()
@@ -548,9 +526,9 @@ class SSAC(BasePolicy, Module):
         )
         # penalty = penalty + (penalty>0).float() * self.penalty_offset
         if self.mlp_multiplier:
-            action_safe = self.actor_safe.act(obs, eval=True)
-            with torch.no_grad():
-                safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
+            # action_safe = self.actor_safe.act(obs, eval=True)
+            # with torch.no_grad():
+            #     safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
             lams = self.multiplier(obs, actor_Qc.detach())
             assert lams.shape == penalty.shape
             lams_safe = torch.mul(actor_Qc<=0, lams)

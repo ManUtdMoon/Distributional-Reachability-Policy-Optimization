@@ -13,6 +13,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import colors, rcParams
+import matplotlib.font_manager as fm
 
 import torch
 
@@ -28,6 +29,9 @@ assert str(ROOT_DIR) == str(PROJ_DIR)
 assert ROOT_DIR.is_dir(), ROOT_DIR
 LOGS_DIR = ROOT_DIR / 'logs' / 'quadrotor'
 
+fm.fontManager.addfont(str(PROJ_DIR / 'arial.ttf'))
+plt.rcParams['font.sans-serif'] = ['Arial']
+plt.rcParams['font.family'] = 'Arial'
 
 params={'font.family': 'Arial',
         # 'font.serif': 'Times New Roman',
@@ -225,7 +229,7 @@ class Vizer_set(object):
             assert metric in ['qc']
 
         fig, axes = plt.subplots(nrows=len(metrics), ncols=len(self.batch_obses_list),
-                                 figsize=(12, 3),
+                                 figsize=(9, 3),
                                  constrained_layout=True)
         # axes.set_position([0.1, 0.1, 0.9, 0.9])
         # fig_aux = plt.figure()
@@ -314,17 +318,18 @@ class Vizer_set(object):
 
                 sub_ax.set_yticks(np.linspace(-2.0, 2.0, 3))
                 ct_list.append(ct)
-                name_list = ["left", "up", "right"]
-                sub_ax.set_title(name_list[i])
+                name_list = ["Left", "Up", "Right"]
+                sub_ax.set_title(name_list[i], fontsize=13)
+                sub_ax.tick_params(labelsize=10)
                 axes_list.append(sub_ax)
 
             # cax = add_right_cax(sub_ax, pad=0.01, width=0.02)
             plt.colorbar(ct_list[1], ax=axes_list,
-                         shrink=0.8, pad=0.02)
+                         shrink=0.7, pad=0.02)
 
-        fig.supxlabel('x')
-        fig.supylabel('y')
-        plt.savefig(str(LOGS_DIR / self.test_log_dir / (metric + str(self.tester.alg.epochs_completed.item()) + '.png')), dpi=300)
+        fig.supxlabel('x', fontsize=12)
+        fig.supylabel('y', fontsize=12)
+        plt.savefig(str(LOGS_DIR / self.test_log_dir / (metric + str(self.tester.alg.epochs_completed.item()) + '.pdf')), dpi=300)
 
 def main():
     # step 1: load config and model
