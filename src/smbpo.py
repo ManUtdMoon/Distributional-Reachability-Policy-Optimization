@@ -138,19 +138,6 @@ class SMBPO(Configurable, Module):
                     )
                     if qc > self.safe_shield_threshold:
                         action = policy_safe.act1(state, eval=True)
-                    
-                    # search for safe action if actor_safe is not safe, but maybe useless
-                    # qc_safe = torch.max(constraint_critic(state.unsqueeze(0), action.unsqueeze(0)))
-                    # if qc_safe > self.safe_shield_threshold:
-                    #     for _ in range(100):
-                    #         action_random = policy_safe.act1(state, eval=False)
-                    #         qc_random = torch.max(constraint_critic(state.unsqueeze(0), action_random.unsqueeze(0)))
-                    #         if qc_random <= self.safe_shield_threshold:
-                    #             print("find safe action!!!!!!!!")
-                    #             action = action_random
-                    #             break
-                    #         if _ == 99:
-                    #             print("failed to find safe action!!!!!!!!")
                 # -------- safety shield end -------- #
 
             else:
@@ -177,27 +164,12 @@ class SMBPO(Configurable, Module):
             # print('constraint_value', constraint_value)
             # print('get_constraint_value', self.get_constraint_value(next_state.unsqueeze(0)).cpu())
             # print(constraint_value.numpy() == self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
-            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(next_state.unsqueeze(0)).cpu(), atol=1e-05)), \
-                print(constraint_value.numpy() - self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
+            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(state.unsqueeze(0)).cpu(), atol=1e-05)), \
+                print(constraint_value.numpy() - self.get_constraint_value(state.unsqueeze(0)).cpu().numpy())
 
             # -------------- reward & constraint value preprocess -------------- #
             if self.reward_scale != 0:
                 buf_reward = reward * self.reward_scale
-
-            buf_constraint_value = torch.where(
-                constraint_value > 0,
-                constraint_value * self.constraint_scale + self.constraint_offset,
-                constraint_value
-            )
-
-            # Modify the last dimension of states, i.e. the learned constrained value
-            # to avoid small values hindering faster learning, must correspond to the 
-            # buf_constrain_value calculation above
-            assert len(state.shape) == len(next_state.shape) == 1
-            if state[-1] > 0:
-                state[-1] = state[-1] * self.constraint_scale + self.constraint_offset
-            if next_state[-1] > 0:
-                next_state[-1] = next_state[-1] * self.constraint_scale + self.constraint_offset
             # -------------- reward & constraint value preprocess -------------- #
 
             goal_met = ('goal_met' in info_keys)
@@ -215,7 +187,7 @@ class SMBPO(Configurable, Module):
                            constraint_values=constraint_value, goal_mets=goal_met)
             self.replay_buffer.append(states=state, actions=action, next_states=next_state,
                                       rewards=buf_reward, dones=done or goal_met, violations=violation,
-                                      constraint_values=buf_constraint_value, goal_mets=goal_met)
+                                      constraint_values=constraint_value, goal_mets=goal_met)
             self.steps_sampled += 1
 
             if done or (len(episode) == max_episode_steps):
@@ -225,7 +197,7 @@ class SMBPO(Configurable, Module):
                 episode_safe = not episode.get('violations').any()
                 self.episodes_sampled += 1
                 if not episode_safe:
-                    self.n_violations += episode.get('violations').sum()
+                    self.n_violations += episode.get('violations').any()
 
                 self._log_tabular({
                     'episodes sampled': self.episodes_sampled.item(),
@@ -323,9 +295,9 @@ class SMBPO(Configurable, Module):
         if self.alive_bonus != 0:    
             combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] + self.alive_bonus
         CONSTRAINT_VALUE_INDEX = 6
-        # combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] * self.constraint_scale
-        # combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] + \
-        #     (combined_samples[CONSTRAINT_VALUE_INDEX]>0).float() * self.constraint_offset
+        combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] * self.constraint_scale
+        combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] + \
+            (combined_samples[CONSTRAINT_VALUE_INDEX]>0).float() * self.constraint_offset
 
         # learning
         critic_loss, constraint_critic_loss = solver.update_critic(*combined_samples)

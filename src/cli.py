@@ -91,7 +91,7 @@ def main(cfg, main):
         now_str = datetime.now().strftime('%m-%d-%y_%H.%M.%S')
         random.seed()
         rand_str = random_string(4, include_uppercase=False, include_digits=False)
-        run_dir = f'{now_str}_{rand_str}'
+        run_dir = f'{now_str}_{cfg.alg}'
     else:
         run_dir = cli_args.run_dir
 

@@ -20,7 +20,7 @@ class SafetyGymWrapper(Wrapper):
         env_cfg = deepcopy(env_cfg_dict[robot_type])
         env = SimpleEngine(env_cfg)
         super().__init__(env)
-        self.done_on_violation = (id is None)  # train: done on violation; eval: false
+
         self._max_episode_steps = self.num_steps
 
         self.con_dim = 1
@@ -28,7 +28,7 @@ class SafetyGymWrapper(Wrapper):
             -np.inf, np.inf, (self.obs_flat_size + 1,), dtype=np.float32
         )  # the additional "2" is current constraint h(s) and isException
         self.info = None
-        self.margin_scale = 0.9  # the closer to 1, the harder to done
+        self.margin_scale = 0.99  # the closer to 1, the harder to done
         assert 0. < self.margin_scale < 1.
 
     def augment_obs(self, obs):
@@ -68,18 +68,19 @@ class SafetyGymWrapper(Wrapper):
         return obs
     
     def step(self, action: np.array):
+        new_info = dict(
+            constraint_value=np.max(self.info['constraint_hazards']),
+        )
         next_obs, rew, done, info = super().step(action)
         next_state = self.augment_obs(next_obs)
-        new_info = dict(
-            constraint_value=next_state[-1],
+        new_info.update(dict(
             violation=(next_state[-1] > 0),
             **info
-        )
+        ))
         self.info = new_info
 
-        # if next_state[-1] >= self.margin_scale * self.env.hazards_size:
-        #     done = True
-        if (next_state[-1] > 0) and self.done_on_violation: done = True
+        if next_state[-1] >= self.margin_scale * self.env.hazards_size:
+            done = True
 
         return next_state, rew, done, new_info
 
@@ -88,15 +89,15 @@ class SafetyGymWrapper(Wrapper):
         state = self.augment_obs(obs)
 
         self.env.sim.forward()
-        # constraint_hazards = []
-        # for h_pos in self.env.hazards_pos:
-        #     h_dist = self.env.dist_xy(h_pos)
-        #     constraint_hazards.append(self.env.hazards_size - h_dist)
+        constraint_hazards = []
+        for h_pos in self.env.hazards_pos:
+            h_dist = self.env.dist_xy(h_pos)
+            constraint_hazards.append(self.env.hazards_size - h_dist)
         
-        # self.info = dict(
-        #     constraint_value=state[-1],
-        #     constraint_hazards=constraint_hazards
-        # )
+        self.info = dict(
+            constraint_value=state[-1],
+            constraint_hazards=constraint_hazards
+        )
 
         return state
 
@@ -115,7 +116,7 @@ class SafetyGymWrapper(Wrapper):
             states = states[np.newaxis, ...]
         assert len(states.shape) >= 2
 
-        return states[..., -1] > 0  # self.margin_scale * self.env.hazards_size
+        return states[..., -1] >= self.margin_scale * self.env.hazards_size
 
     def check_violation(self, states: np.array):
         '''Compute whether the constraints are violated
