@@ -42,7 +42,7 @@ class SMBPO(Configurable, Module):
         safe_shield = True
         safe_shield_threshold = -0.1
         eval_shield_threshold = -0.1
-        eval_shield_type = 'linear'
+        shield_type = 'linear'
 
     def __init__(self, config, env_factory, data, epochs):
         Configurable.__init__(self, config)
@@ -128,18 +128,31 @@ class SMBPO(Configurable, Module):
                 action = policy.act1(state, eval=False)
 
                 # -------- safety shield ----------- #
-                if self.safe_shield:
-                    qc = self.solver._get_qc(
-                        constraint_critic(
-                            state.unsqueeze(0),
-                            action.unsqueeze(0),
-                            uncertainty=self.solver.distributional_qc
+                with torch.no_grad():
+                    if self.safe_shield:
+                        qc = self.solver._get_qc(
+                            constraint_critic(
+                                state.unsqueeze(0),
+                                action.unsqueeze(0),
+                                uncertainty=self.solver.distributional_qc
+                            )
                         )
-                    )
-                    if qc > self.safe_shield_threshold:
-                        action = policy_safe.act1(state, eval=True)
-                # -------- safety shield end -------- #
+                        if qc > self.safe_shield_threshold:
+                            action_safe = policy_safe.act1(state, eval=True)
 
+                            if self.shield_type == "safe":
+                                action = action_safe
+                            elif self.shield_type == "linear":
+                                for ratio in list(np.linspace(0,1,11)):  # 0. -> 1.
+                                    action_mix = action * (1-ratio) + action_safe * ratio  # from action to action_safe
+                                    qc_mix = self.solver._get_qc(constraint_critic(
+                                        state.unsqueeze(0), action_mix.unsqueeze(0), 
+                                        uncertainty=self.solver.distributional_qc)
+                                    )
+                                    if qc_mix <= self.safe_shield_threshold:
+                                        break
+                                
+                # -------- safety shield end -------- #
             else:
                 policy = self.uniform_policy
                 action = policy.act1(state, eval=False)
@@ -468,7 +481,7 @@ class SMBPO(Configurable, Module):
         eval_traj = sample_episodes_batched(self.eval_env, self.solver, N_EVAL_TRAJ, 
                                             eval=True,
                                             safe_shield_threshold=self.eval_shield_threshold,
-                                            shield_type=self.eval_shield_type)
+                                            shield_type=self.shield_type)
 
         lengths = [len(traj) for traj in eval_traj]
         length_mean, length_std = float(np.mean(lengths)), float(np.std(lengths))
