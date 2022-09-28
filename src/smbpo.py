@@ -177,7 +177,7 @@ class SMBPO(Configurable, Module):
                 episode_safe = not episode.get('violations').any()
                 self.episodes_sampled += 1
                 if not episode_safe:
-                    self.n_violations += episode.get('violations').sum()
+                    self.n_violations += episode.get('violations').any()
 
                 self._log_tabular({
                     'episodes sampled': self.episodes_sampled.item(),

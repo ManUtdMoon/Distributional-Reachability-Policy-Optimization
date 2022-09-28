@@ -23,6 +23,7 @@ class Config(BaseConfig):
     seed = 64578
     epochs = 600
     alg_cfg = SMBPO.Config()
+    alg = 'qc_star'
 
 
 def main(cfg):

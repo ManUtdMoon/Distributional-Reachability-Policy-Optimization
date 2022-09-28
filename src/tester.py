@@ -83,7 +83,7 @@ class Config(BaseConfig):
     seed = 1
     epochs = 600
     alg_cfg = SMBPO.Config()
-
+    alg = 'Fusion'
 
 def build_parser():
     # load saved config

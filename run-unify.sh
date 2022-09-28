@@ -3,8 +3,8 @@
 PARENT_DIR=$(cd $(dirname $0);cd ..; pwd)
 export PYTHONPATH=$PYTHONPATH:$PARENT_DIR
 
-# # quadrotor cartpole-move
-# # Vanilla
+# quadrotor cartpole-move
+# Vanilla
 # for i in 43567 748365 219803 4354 64578
 # do
 #     python main.py -c config/quadrotor.json \
@@ -31,9 +31,9 @@ export PYTHONPATH=$PYTHONPATH:$PARENT_DIR
 # done
 
 # DRPO
-for i in 64578 219803 4354 43567 49283
+for i in 453 768 234 564 98 1829 27138
 do
-    python main.py -c config/quadrotor.json \
+    CUDA_VISIBLE_DEVICES=1 python main.py -c config/quadrotor.json \
         -s seed $i \
         -s alg_cfg.safe_shield False \
         -s alg_cfg.sac_cfg.qc_under_uncertainty True \

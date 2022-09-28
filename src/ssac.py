@@ -156,6 +156,9 @@ class SSAC(BasePolicy, Module):
         qc_td_bound = 5.
         distributional_qc = True
 
+        # ablation_framework h-params
+        enable_pi_qc = False
+
     def __init__(self, config, state_dim, action_dim, con_dim, 
                  horizon, epochs, steps_per_epoch, solver_updates_per_step,
                  constraint_scale, env_factory, model_ensemble,
@@ -337,7 +340,8 @@ class SSAC(BasePolicy, Module):
                 """
                 if self.qc_under_uncertainty:
                     if self.distributional_qc:
-                        distr = self.actor_safe.distr(next_obs)
+                        actor = self.actor if self.enable_pi_qc else self.actor_safe
+                        distr = actor.distr(next_obs)
                         next_action = distr.sample()
                         _, _, next_qc_sample = self.constraint_critic_target(
                             next_obs, next_action, sample=True
@@ -472,10 +476,9 @@ class SSAC(BasePolicy, Module):
             actor_Qc = self.constraint_critic(obs, action)
         if self.mlp_multiplier:
             with torch.no_grad():
-                action_safe = self.actor_safe.act(obs, eval=True)
-                safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
-                # lams = torch.max(self.multiplier(obs, action), (actor_Qc>0)*19.0).detach()
-                lams = self.multiplier(obs, safe_Qc)
+                # action_safe = self.actor_safe.act(obs, eval=True)
+                # safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
+                lams = self.multiplier(obs, actor_Qc.detach())
             assert lams.shape == actor_Qc.shape
         else:
             # lams = self.lam.detach()
@@ -543,13 +546,13 @@ class SSAC(BasePolicy, Module):
         )
         # penalty = penalty + (penalty>0).float() * self.penalty_offset
         if self.mlp_multiplier:
-            action_safe = self.actor_safe.act(obs, eval=True)
-            with torch.no_grad():
-                safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
-            lams = self.multiplier(obs, safe_Qc)
+            # action_safe = self.actor_safe.act(obs, eval=True)
+            # with torch.no_grad():
+            #     safe_Qc = self._get_qc(self.constraint_critic(obs, action_safe, uncertainty=self.distributional_qc))
+            lams = self.multiplier(obs, actor_Qc.detach())
             assert lams.shape == penalty.shape
-            lams_safe = torch.mul(safe_Qc<=0, lams)
-            lams_unsafe = torch.mul(safe_Qc>0, lams)
+            lams_safe = torch.mul(actor_Qc<=0, lams)
+            lams_unsafe = torch.mul(actor_Qc>0, lams)
             
             '''Special lam loss
             For safe states, learn their lam: 0 or finite vlaues
@@ -559,7 +562,7 @@ class SSAC(BasePolicy, Module):
             lam_loss = -0.5 * torch.mean(torch.mul(lams_safe, penalty.detach())) + \
                        self.criterion(
                            lams_unsafe,
-                           (safe_Qc>0) * (self.mlp_multiplier_cfg.upper_bound - self.lam_epsilon)
+                           (actor_Qc>0) * (self.mlp_multiplier_cfg.upper_bound - self.lam_epsilon)
                        )
         else:
             lams = self.lam
