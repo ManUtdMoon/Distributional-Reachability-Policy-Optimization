@@ -31,12 +31,14 @@ export PYTHONPATH=$PYTHONPATH:$PARENT_DIR
 # done
 
 # DRPO
-for i in 64578 219803 4354 43567 49283
+for i in 64578 219803 4354 1 49283
 do
     python main.py -c config/quadrotor.json \
         -s seed $i \
         -s alg_cfg.safe_shield False \
         -s alg_cfg.sac_cfg.qc_under_uncertainty True \
         -s alg_cfg.sac_cfg.distributional_qc True \
-        -s alg_cfg.eval_shield_type no
+        -s alg_cfg.eval_shield_type no \
+        -s alg qh_pi \
+        -s alg_cfg.sac_cfg.enable_pi_qc True
 done
