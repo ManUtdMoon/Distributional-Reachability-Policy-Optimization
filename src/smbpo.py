@@ -42,7 +42,7 @@ class SMBPO(Configurable, Module):
         safe_shield = True
         safe_shield_threshold = -0.1
         eval_shield_threshold = -0.1
-        shield_type = 'linear'
+        eval_shield_type = 'linear'
 
     def __init__(self, config, env_factory, data, epochs):
         Configurable.__init__(self, config)
@@ -138,19 +138,7 @@ class SMBPO(Configurable, Module):
                             )
                         )
                         if qc > self.safe_shield_threshold:
-                            action_safe = policy_safe.act1(state, eval=True)
-
-                            if self.shield_type == "safe":
-                                action = action_safe
-                            elif self.shield_type == "linear":
-                                for ratio in list(np.linspace(0,1,11)):  # 0. -> 1.
-                                    action_mix = action * (1-ratio) + action_safe * ratio  # from action to action_safe
-                                    qc_mix = self.solver._get_qc(constraint_critic(
-                                        state.unsqueeze(0), action_mix.unsqueeze(0), 
-                                        uncertainty=self.solver.distributional_qc)
-                                    )
-                                    if qc_mix <= self.safe_shield_threshold:
-                                        break
+                            action = policy_safe.act1(state, eval=True)
                                 
                 # -------- safety shield end -------- #
             else:
@@ -177,12 +165,27 @@ class SMBPO(Configurable, Module):
             # print('constraint_value', constraint_value)
             # print('get_constraint_value', self.get_constraint_value(next_state.unsqueeze(0)).cpu())
             # print(constraint_value.numpy() == self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
-            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(state.unsqueeze(0)).cpu(), atol=1e-05)), \
-                print(constraint_value.numpy() - self.get_constraint_value(state.unsqueeze(0)).cpu().numpy())
+            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(next_state.unsqueeze(0)).cpu(), atol=1e-05)), \
+                print(constraint_value.numpy() - self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
 
             # -------------- reward & constraint value preprocess -------------- #
             if self.reward_scale != 0:
                 buf_reward = reward * self.reward_scale
+
+            buf_constraint_value = torch.where(
+                constraint_value > 0,
+                constraint_value * self.constraint_scale + self.constraint_offset,
+                constraint_value
+            )
+
+            # Modify the last dimension of states, i.e. the learned constrained value
+            # to avoid small values hindering faster learning, must correspond to the 
+            # buf_constrain_value calculation above
+            assert len(state.shape) == len(next_state.shape) == 1
+            if state[-1] > 0:
+                state[-1] = state[-1] * self.constraint_scale + self.constraint_offset
+            if next_state[-1] > 0:
+                next_state[-1] = next_state[-1] * self.constraint_scale + self.constraint_offset
             # -------------- reward & constraint value preprocess -------------- #
 
             goal_met = ('goal_met' in info_keys)
@@ -200,7 +203,7 @@ class SMBPO(Configurable, Module):
                            constraint_values=constraint_value, goal_mets=goal_met)
             self.replay_buffer.append(states=state, actions=action, next_states=next_state,
                                       rewards=buf_reward, dones=done or goal_met, violations=violation,
-                                      constraint_values=constraint_value, goal_mets=goal_met)
+                                      constraint_values=buf_constraint_value, goal_mets=goal_met)
             self.steps_sampled += 1
 
             if done or (len(episode) == max_episode_steps):
@@ -308,9 +311,9 @@ class SMBPO(Configurable, Module):
         if self.alive_bonus != 0:    
             combined_samples[REWARD_INDEX] = combined_samples[REWARD_INDEX] + self.alive_bonus
         CONSTRAINT_VALUE_INDEX = 6
-        combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] * self.constraint_scale
-        combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] + \
-            (combined_samples[CONSTRAINT_VALUE_INDEX]>0).float() * self.constraint_offset
+        # combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] * self.constraint_scale
+        # combined_samples[CONSTRAINT_VALUE_INDEX] = combined_samples[CONSTRAINT_VALUE_INDEX] + \
+        #     (combined_samples[CONSTRAINT_VALUE_INDEX]>0).float() * self.constraint_offset
 
         # learning
         critic_loss, constraint_critic_loss = solver.update_critic(*combined_samples)
@@ -481,7 +484,7 @@ class SMBPO(Configurable, Module):
         eval_traj = sample_episodes_batched(self.eval_env, self.solver, N_EVAL_TRAJ, 
                                             eval=True,
                                             safe_shield_threshold=self.eval_shield_threshold,
-                                            shield_type=self.shield_type)
+                                            shield_type=self.eval_shield_type)
 
         lengths = [len(traj) for traj in eval_traj]
         length_mean, length_std = float(np.mean(lengths)), float(np.std(lengths))
