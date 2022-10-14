@@ -20,6 +20,7 @@ The code is based on [SMBPO](https://github.com/gwthomas/Safe-MBPO) by Garrett T
 ## Prerequisites
 1. Install MuJoCo and [mujoco-py](https://github.com/openai/mujoco-py).
 2. Clone [safe-control-gym](https://github.com/ManUtdMoon/safe-control-gym) and [safety-gym](https://github.com/ManUtdMoon/safety-gym) and run ``pip install -e .`` in both directories to install the two environments. Note that we make changes (such as time-up settings) to the envs so they are different from the versions developed by original authors. You need to **install our repositories** to run DRPO codes.
+3. run ``pip install -r requirements.txt``.
 3. Set the ``ROOT_DIR`` in ``./src/defaults.py`` as ``/your/path/to/Safe_MBRL``. This is where experiments' logs and checkpoints will be placed.
 
 
