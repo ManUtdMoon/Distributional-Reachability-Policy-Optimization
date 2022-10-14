@@ -210,5 +210,5 @@ def main():
 
 if __name__ == '__main__':
     # Usage: in the command line, input the followings
-    # $ python tester.py --run-dir <log_dir> --set env_name quadrotor --epoch <epoch_id>
+    # $ python tester.py --run-dir 06-03-22_15.45.15_mbpo --set env_name quadrotor --epoch <epoch_id>
     main()
