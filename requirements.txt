@@ -5,4 +5,4 @@ h5py
 opencv-python
 torch
 gym==0.17.3
-mujoco-py==2.0.2.13
+mujoco-py<2.2,>=2.1
