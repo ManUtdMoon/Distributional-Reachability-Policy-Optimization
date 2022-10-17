@@ -56,4 +56,13 @@ in the command line.
 When contributing to this repository, please first discuss the change you wish to make via issue, email, or any other method with me before making a change. Also free to fork/star and make any changes.
 
 ## If you find our paper/codes helpful, welcome to cite:
-
+```
+@misc{yu2022safe,
+  doi = {10.48550/ARXIV.2210.07553},
+  url = {https://arxiv.org/abs/2210.07553},
+  author = {Yu, Dongjie and Zou, Wenjun and Yang, Yujie and Ma, Haitong and Li, Shengbo Eben and Duan, Jingliang and Chen, Jianyu},  
+  title = {Safe Model-Based Reinforcement Learning with an Uncertainty-Aware Reachability Certificate},
+  publisher = {arXiv},
+  year = {2022},
+}
+```
