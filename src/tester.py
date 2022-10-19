@@ -28,7 +28,7 @@ ROOT_DIR = Path(ROOT_DIR)
 assert ROOT_DIR.is_dir(), ROOT_DIR
 
 
-def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False):
+def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False, safe_shield_threshold=-0.1, shield_type="linear"):
     if not isinstance(env, BaseBatchedEnv):
         env = ProductEnv([env])
 
@@ -43,7 +43,26 @@ def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False):
 
     states = env.reset()
     while True:
-        actions = policy.act(states, eval=eval)
+        actions_performance = policy.act(states, eval=eval)
+        # -------- safety shield ----------- #
+        if eval:
+            qcs = policy._get_qc(policy.constraint_critic(states, actions_performance))
+            actions_safe = policy.actor_safe.act(states, eval=eval)
+            if shield_type == "safe":
+                danger_bool = (qcs > safe_shield_threshold).tile((action_dim, 1)).t()
+                actions = torch.where(danger_bool, actions_safe, actions_performance)
+            elif shield_type == "linear":
+                actions = actions_safe
+                for i in range(11):
+                    ratio = (10-i)/10  # 1.0~0.0
+                    action_mix = actions_safe*ratio + actions_performance*(1-ratio)
+                    qcs_mix = policy._get_qc(policy.constraint_critic(states, action_mix))
+                    safe_bool = (qcs_mix <= safe_shield_threshold).tile((action_dim, 1)).t()
+                    actions = torch.where(safe_bool, action_mix, actions)
+            else:
+                actions = actions_performance
+
+
         next_states, rewards, dones, infos = env.step(actions)
         violations = [info['violation'] for info in infos]
 
