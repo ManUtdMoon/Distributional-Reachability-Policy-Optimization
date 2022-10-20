@@ -5,23 +5,17 @@ from gym.wrappers import RescaleAction
 
 def get_env(env_name, wrap_torch=True, **kwargs):
     from .env.torch_wrapper import TorchWrapper
-    from .env.hopper_no_bonus import HopperNoBonusEnv
-    from .env.cheetah_no_flip import CheetahNoFlipEnv
-    from .env.ant_no_bonus import AntNoBonusEnv
-    from .env.humanoid_no_bonus import HumanoidNoBonusEnv
     from .env.poles.classic_pendulum import SafeClassicPendulum
     from .env.poles.inverted_pendulum import SafeInvertedPendulumEnv
     from .env.quadrotor.quadrotor import QuadrotorWrapperEnv
+    from .env.double_integrator import DoubleIntegrator
     envs = {
-        'hopper': HopperNoBonusEnv,
-        'cheetah-no-flip': CheetahNoFlipEnv,
-        'ant': AntNoBonusEnv,
-        'humanoid': HumanoidNoBonusEnv,
         'pendulum-upright': SafeClassicPendulum,
         'pendulum-tilt': SafeClassicPendulum,
         'cartpole-upright': SafeInvertedPendulumEnv,
         'cartpole-move': SafeInvertedPendulumEnv,
-        'quadrotor': QuadrotorWrapperEnv
+        'quadrotor': QuadrotorWrapperEnv,
+        'double_integrator': DoubleIntegrator,
     }
     # if env_name != 'quadrotor':
     #     assert 'id' in kwargs.keys()

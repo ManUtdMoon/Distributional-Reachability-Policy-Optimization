@@ -63,6 +63,7 @@ class SMBPO(Configurable, Module):
         self.check_done = lambda states: torchify(self.real_env.check_done(states.cpu().numpy()))
         self.check_violation = lambda states: torchify(self.real_env.check_violation(states.cpu().numpy()))
         self.get_constraint_value = lambda states: torchify(self.real_env.get_constraint_values(states.cpu().numpy()))
+        self.get_reward = lambda states, actions: torchify(self.real_env.get_rewards(states.cpu().numpy(), actions.cpu().numpy()))
 
         self.model_ensemble = BatchedGaussianEnsemble(self.model_cfg, self.state_dim, self.action_dim)
         self.solver = SSAC(self.sac_cfg, self.state_dim, self.action_dim, self.con_dim, 
@@ -238,6 +239,7 @@ class SMBPO(Configurable, Module):
             with torch.no_grad():
                 actions = policy.act(states, eval=False)
                 next_states, rewards = self.model_ensemble.sample(states, actions)
+                rewards = self.get_reward(next_states, actions)
             dones = self.check_done(next_states)
             violations = self.check_violation(next_states)
             constraint_values = self.get_constraint_value(next_states)

@@ -14,7 +14,7 @@ from src.smbpo import SMBPO
 
 
 ROOT_DIR = Path(ROOT_DIR)
-SAVE_PERIOD = 10
+SAVE_PERIOD = 1
 
 
 class Config(BaseConfig):

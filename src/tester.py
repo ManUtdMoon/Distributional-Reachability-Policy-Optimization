@@ -9,7 +9,6 @@ PROJ_DIR = Path.cwd().parent
 sys.path.append(str(PROJ_DIR))
 
 import numpy as np
-from pyrsistent import v
 
 import torch
 
@@ -102,6 +101,7 @@ class Config(BaseConfig):
     seed = 1
     epochs = 600
     alg_cfg = SMBPO.Config()
+    alg = 'DRPO'
 
 
 def build_parser():
@@ -149,9 +149,9 @@ class Tester(object):
     
         log.setup(test_log_dir)
         log.message(f'Test log directory: {test_log_dir}')
+        cfg.alg_cfg.mode = 'test'
         self.cfg = cfg
         self.test_log_dir = test_log_dir
-
         self.data = CheckpointableData()
         self.alg = SMBPO(cfg.alg_cfg, env_factory, self.data, cfg.epochs)
         self.checkpointer = Checkpointer(self.alg, log.dir.parent, 'ckpt_{}.pt')
