@@ -124,7 +124,7 @@ class DoubleIntegrator(gym.Env):
         return violations
 
     def check_out(self, states):
-        return self.check_violation(states, margin=5.0)
+        return self.check_violation(states, margin=1.0)
 
     def get_rewards(self, states, actions):
         assert len(states.shape) >= 2

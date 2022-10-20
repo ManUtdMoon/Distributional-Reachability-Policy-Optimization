@@ -13,7 +13,7 @@
         "std_ratio": 2.0
       },
       "actor_lr": 1e-4,
-      "actor_lr_end": 4e-5,
+      "actor_lr_end": 1e-5,
       "qc_under_uncertainty": false,
       "distributional_qc": false
     },
@@ -24,8 +24,8 @@
     "buffer_min": 500,
     "reward_scale": 1.0,
     "alive_bonus": 0.0,
-    "constraint_scale": 1.0,
+    "constraint_scale": 5.0,
     "safe_shield": false
   },
-  "epochs": 50
+  "epochs": 100
 }

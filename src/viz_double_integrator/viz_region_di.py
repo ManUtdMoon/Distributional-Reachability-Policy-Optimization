@@ -142,7 +142,7 @@ def main():
     # print(epochs)
     for i, epoch in enumerate(epochs[0]):
         if i == 0:
-            vizer = Vizer_set(cfg, test_log_dir, epoch, bound=[-5., 5., -5., 5.])
+            vizer = Vizer_set(cfg, test_log_dir, epoch, bound=[-6., 6., -6., 6.])
         else:
             vizer.tester.load_model(epoch)
         vizer.plot_region(['qc'])
@@ -150,5 +150,5 @@ def main():
 
 if __name__ == '__main__':
     # Usage: in the command line, input the followings
-    # $ python viz_region_di.py --run-dir <log_dir> --set env_name double_integrator --epoch <epoch_id, can be more than 1>
+    # $ python viz_region_di.py --set env_name double_integrator --run-dir <log_dir> --epoch <epoch_id, can be more than 1>
     main()
