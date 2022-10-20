@@ -163,8 +163,8 @@ class SMBPO(Configurable, Module):
             # print('constraint_value', constraint_value)
             # print('get_constraint_value', self.get_constraint_value(next_state.unsqueeze(0)).cpu())
             # print(constraint_value.numpy() == self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
-            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(next_state.unsqueeze(0)).cpu(), atol=1e-05)), \
-                print(constraint_value.numpy() - self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
+            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(state.unsqueeze(0)).cpu(), atol=1e-05)), \
+                print(constraint_value.numpy() - self.get_constraint_value(state.unsqueeze(0)).cpu().numpy())
             for buffer in [episode, self.replay_buffer]:
                 buffer.append(states=state, actions=action, next_states=next_state,
                               rewards=reward, dones=done, violations=violation,
@@ -242,7 +242,7 @@ class SMBPO(Configurable, Module):
                 rewards = self.get_reward(next_states, actions)
             dones = self.check_done(next_states)
             violations = self.check_violation(next_states)
-            constraint_values = self.get_constraint_value(next_states)
+            constraint_values = self.get_constraint_value(states)
             buffer.extend(states=states, actions=actions, next_states=next_states,
                           rewards=rewards, dones=dones, violations=violations, constraint_values=constraint_values)
             continues = ~(dones)

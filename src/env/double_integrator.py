@@ -50,7 +50,6 @@ class DoubleIntegrator(gym.Env):
             violation=self.check_violation(self.state).item(),
             constraint_value=cons_vals,
         )
-        print(self.state)
         return self._get_obs(), self._get_reward(self.state, action), done, info
 
     def _get_obs(self):
