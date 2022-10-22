@@ -66,7 +66,7 @@ class Vizer_set(object):
     def plot_region(self, metrics):
 
         for metric in metrics:
-            assert metric in ['qc']
+            assert metric in ['lam']
 
         fig, axes = plt.subplots(nrows=len(metrics), ncols=1,
                                  figsize=(4, 3),
@@ -80,16 +80,18 @@ class Vizer_set(object):
             ct_list = []
             
             states = torch.from_numpy(self.obses).float().to(device)
-            actions = self.tester.alg.solver.actor_safe.act(states, eval=True)
+            actions = self.tester.alg.solver.actor.act(states, eval=True)
             distributional_qc = self.tester.alg.solver.distributional_qc
             qcs = self.tester.alg.solver.constraint_critic(states, actions, uncertainty=distributional_qc)
-
             if self.tester.alg.solver.constrained_fcn == 'reachability':
                 qcs = self.tester.alg.solver._get_qc(qcs)
 
-            flatten_qcs = qcs.cpu().numpy()
+            lams = self.tester.alg.solver.multiplier(states, qcs)
+            assert lams.shape == qcs.shape
 
-            NAME2VALUE = dict(zip(['qc'], [flatten_qcs]))
+            flatten_lams = lams.cpu().numpy()
+
+            NAME2VALUE = dict(zip(['lam'], [flatten_lams]))
             val = NAME2VALUE[metric].reshape(self.x1_grid.shape)
 
             min_val_list.append(np.min(val))
@@ -109,19 +111,11 @@ class Vizer_set(object):
                     self.x1_grid, self.x2_grid, data2plot[i],
                     norm=norm,
                     cmap='rainbow',
-                    #  levels=[-0.06, -0.04, -0.02, 0., 0.2, 0.6, 1.0, 1.2],  # CBF
-                    #  levels=[-2.4, -1.2, 0., 1.2, 2.4, 3.6, 4.8],  # RAC
-                    #  levels=[-1.2, -0.8, -0.4, 0., 0.4, 0.8, 1.2],  # SI
                 )  
                 x2_min = -np.sqrt(2 * (self.x1 + 5))
                 x2_max = np.sqrt(2 * (5 - self.x1))
                 sub_ax.plot(self.x1, x2_min, 'k--')
                 sub_ax.plot(self.x1, x2_max, 'k--')
-
-                ct_line = sub_ax.contour(self.x1_grid, self.x2_grid, data2plot[i],
-                                         levels=[0], colors='black',
-                                         linewidths=2.5, linestyles='solid')
-                sub_ax.clabel(ct_line, inline=True, fontsize=14, fmt=r'0',)
 
                 # sub_ax.set_yticks(np.linspace(0.5, 1.5, 3))
                 ct_list.append(ct)
@@ -145,10 +139,10 @@ def main():
             vizer = Vizer_set(cfg, test_log_dir, epoch, bound=[-6., 6., -6., 6.])
         else:
             vizer.tester.load_model(epoch)
-        vizer.plot_region(['qc'])
+        vizer.plot_region(['lam'])
 
 
 if __name__ == '__main__':
     # Usage: in the command line, input the followings
-    # $ python viz_region_di.py --set env_name double_integrator --motivation region --run-dir <log_dir> --epoch <epoch_id, can be more than 1>
+    # $ python viz_lam_di.py --set env_name double_integrator --motivation lam --run-dir <log_dir> --epoch <epoch_id, can be more than 1>
     main()

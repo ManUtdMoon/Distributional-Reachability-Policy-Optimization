@@ -115,5 +115,5 @@ def main():
 
 if __name__ == '__main__':
     # Usage: in the command line, input the followings
-    # $ python viz_trj_di.py --set env_name double_integrator --run-dir <log_dir> --epoch <epoch_id, can be more than 1>
+    # $ python viz_trj_di.py --set env_name double_integrator --motivation traj --run-dir <log_dir> --epoch <epoch_id, can be more than 1>
     main()

@@ -110,6 +110,7 @@ def build_parser():
 
     parser = ArgumentParser()
     parser.add_argument('--run-dir', default=None)
+    parser.add_argument('--motivation', default=None)
     parser.add_argument('--set', default=[], action='append', nargs=2)
     parser.add_argument('--epoch', default=[], nargs='*', type=int, action='append')
     cli_args = parser.parse_args()
@@ -137,7 +138,7 @@ def build_parser():
     
     # main body    
     time_now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    test_log_dir = run_dir / 'test-{}'.format(time_now)
+    test_log_dir = run_dir / ('test-{}'.format(time_now) + '-' + cli_args.motivation)
     test_log_dir.mkdir(exist_ok=True, parents=True)
 
     return cfg, test_log_dir, cli_args.epoch

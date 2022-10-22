@@ -26,18 +26,7 @@ class DoubleIntegrator(gym.Env):
         return [seed]
 
     def reset(self) -> np.ndarray:
-        rand = np.random.random()
-        if rand < 0.4:
-            self.state = np.random.uniform(low=-5, high=5, size=2)
-        elif rand < 0.7:
-            x = np.random.uniform(low=3, high=5.5)
-            y = np.random.uniform(low=-5.5, high=-3)
-            self.state = np.array([x, y])
-        else:
-            x = np.random.uniform(low=-5.5, high=-3)
-            y = np.random.uniform(low=3, high=5.5)
-            self.state = np.array([x, y])
-
+        self.state = np.random.uniform(low=-5, high=5, size=2)
         if self.id is not None:
             self.state = np.array([-4.8, 4], dtype=np.float32)
         return self._get_obs()

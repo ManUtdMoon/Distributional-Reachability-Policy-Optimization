@@ -42,7 +42,7 @@ class SMBPO(Configurable, Module):
         safe_shield = True
         safe_shield_threshold = -0.1
         eval_shield_threshold = -0.05
-        eval_shield_type = "no"
+        eval_shield_type = "linear"
 
     def __init__(self, config, env_factory, data, epochs):
         Configurable.__init__(self, config)
