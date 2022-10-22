@@ -80,7 +80,7 @@ class Vizer_set(object):
             ct_list = []
             
             states = torch.from_numpy(self.obses).float().to(device)
-            actions = self.tester.alg.solver.act(states, eval=True)
+            actions = self.tester.alg.solver.actor_safe.act(states, eval=True)
             distributional_qc = self.tester.alg.solver.distributional_qc
             qcs = self.tester.alg.solver.constraint_critic(states, actions, uncertainty=distributional_qc)
 

@@ -75,15 +75,21 @@ class Vizer_set(object):
         rl_x1 = states[:, 0]
         rl_x2 = states[:, 1]
         time_step = np.arange(rl_x1.shape[0])
-        rl_traj = ax.scatter(rl_x1, rl_x2, s=10, c=time_step, cmap='coolwarm')
+        rl_traj = ax.scatter(rl_x1, rl_x2, s=5, c=time_step, cmap='GnBu')
         # --------- get RL policy trajectoiry end --------- #
 
         # --------- get MPC trajectoiry start --------- #
-
+        mpc_res = np.load('./mpc.npy', allow_pickle=True).item()
+        # print(mpc_res)
+        mpc_x = mpc_res['state']
+        assert mpc_x.shape[1] == 2
+        time_step = np.arange(mpc_x[:, 0].shape[0])
+        mpc_traj = ax.scatter(mpc_x[:, 0], mpc_x[:, 1], s=5, c=time_step, cmap='YlOrBr')
         # --------- get MPC trajectoiry end --------- #
         ax.set_xlim(-5, 5)
         ax.set_ylim(-5, 5)
-        plt.colorbar(rl_traj)
+        plt.colorbar(rl_traj, shrink=0.8, pad=0.02)
+        plt.colorbar(mpc_traj, shrink=0.8, pad=0.02)
         fig.supxlabel(r'$x_1$')
         fig.supylabel(r'$x_2$')
         plt.savefig(str(LOGS_DIR / self.test_log_dir / (str(self.tester.alg.epochs_completed.item()) + '.png')), dpi=300)

@@ -7,13 +7,13 @@
       "penalty_lb": -5.0,
       "penalty_ub": 100.0,
       "mlp_multiplier_cfg": {
-        "upper_bound": 50.0
+        "upper_bound": 100.0
       },
       "constraint_critic_cfg": {
         "std_ratio": 2.0
       },
       "actor_lr": 1e-4,
-      "actor_lr_end": 1e-5,
+      "actor_lr_end": 1e-6,
       "qc_under_uncertainty": false,
       "distributional_qc": false
     },
@@ -27,5 +27,5 @@
     "constraint_scale": 5.0,
     "safe_shield": false
   },
-  "epochs": 100
+  "epochs": 200
 }
