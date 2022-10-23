@@ -14,6 +14,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import colors, rcParams
 import matplotlib.patches as patches
+import matplotlib.font_manager as fm
 
 import torch
 
@@ -26,6 +27,7 @@ ROOT_DIR = Path(ROOT_DIR)
 assert ROOT_DIR.is_dir(), ROOT_DIR
 LOGS_DIR = ROOT_DIR / 'logs' / 'double_integrator'
 
+fm.fontManager.addfont(str(PROJ_DIR / 'arial.ttf'))
 
 params = {
     'font.family': 'Arial',
@@ -33,7 +35,7 @@ params = {
 }
 rcParams.update(params)
 
-
+labelsize = 9
 class Vizer_set(object):
     def __init__(self,
                  cfg,
@@ -65,17 +67,19 @@ class Vizer_set(object):
     
     @torch.no_grad()
     def plot_traj(self):
-        fig, ax = plt.subplots(nrows=1, ncols=1,
-                                 figsize=(4, 3),
-                                 constrained_layout=True)
-        
+        plt.rcParams['figure.constrained_layout.use'] = True
+        fig = plt.figure(figsize=(8, 4))
+
+        # fig 1: traj
+        ax1 = plt.subplot(131)
         # --------- get RL policy trajectoiry start --------- #
         traj = self._get_eval_traj()
         states = traj[0].get('states').cpu().numpy()
+        actions = traj[0].get('actions').cpu().numpy()
         rl_x1 = states[:, 0]
         rl_x2 = states[:, 1]
-        time_step = np.arange(rl_x1.shape[0])
-        rl_traj = ax.scatter(rl_x1, rl_x2, s=5, c=time_step, cmap='GnBu')
+        time_step_rl = np.arange(rl_x1.shape[0])
+        rl_traj = ax1.scatter(rl_x1, rl_x2, s=5, c=time_step_rl, cmap='GnBu')
         # --------- get RL policy trajectoiry end --------- #
 
         # --------- get MPC trajectoiry start --------- #
@@ -83,15 +87,49 @@ class Vizer_set(object):
         # print(mpc_res)
         mpc_x = mpc_res['state']
         assert mpc_x.shape[1] == 2
-        time_step = np.arange(mpc_x[:, 0].shape[0])
-        mpc_traj = ax.scatter(mpc_x[:, 0], mpc_x[:, 1], s=5, c=time_step, cmap='YlOrBr')
+        time_step_mpc = np.arange(mpc_x[:, 0].shape[0])
+        mpc_traj = ax1.scatter(mpc_x[:, 0], mpc_x[:, 1], s=5, c=time_step_mpc, cmap='YlOrBr')
         # --------- get MPC trajectoiry end --------- #
-        ax.set_xlim(-5, 5)
-        ax.set_ylim(-5, 5)
-        plt.colorbar(rl_traj, shrink=0.8, pad=0.02)
-        plt.colorbar(mpc_traj, shrink=0.8, pad=0.02)
-        fig.supxlabel(r'$x_1$')
-        fig.supylabel(r'$x_2$')
+        ax1.set_xlim(-5, 5)
+        ax1.set_ylim(-5, 5)
+        ax1.set_aspect(1)
+        ax1.tick_params(axis='x', labelsize=labelsize)
+        ax1.tick_params(axis='y', labelsize=labelsize)
+
+        cbar1 = plt.colorbar(rl_traj, shrink=0.6, pad=0.02)
+        cbar1.ax.tick_params(labelsize=labelsize)
+        cbar2 = plt.colorbar(mpc_traj, shrink=0.6, pad=0.02)
+        cbar2.ax.tick_params(labelsize=labelsize)
+
+        # fig 2: x1 traj
+        ax2 = plt.subplot(322)
+        ax2.plot(time_step_rl * 0.1, rl_x1)
+        ax2.plot(time_step_mpc * 0.1, mpc_x[:, 0])
+        ax2.set_ylim(-5, 5)
+        ax2.tick_params(axis='x', labelsize=labelsize)
+        ax2.tick_params(axis='y', labelsize=labelsize)
+        ax2.set_ylabel(r'$x_1$', fontsize=labelsize)
+
+        # fig 3: x2 traj
+        ax3  = plt.subplot(324, sharex=ax2)
+        ax3.plot(time_step_rl * 0.1, rl_x2)
+        ax3.plot(time_step_mpc * 0.1, mpc_x[:, 1])
+        ax3.set_ylim(-5, 5)
+        ax3.set_ylabel(r'$x_2$', fontsize=labelsize)
+        ax3.tick_params(axis='x', labelsize=labelsize)
+        ax3.tick_params(axis='y', labelsize=labelsize)
+
+        # fig 4: act traj
+        ax4  = plt.subplot(326, sharex=ax2)
+        ax4.plot(time_step_rl * 0.1 + 0.1, actions)
+        ax4.plot(time_step_mpc[1:] * 0.1, mpc_res['action'])
+        ax4.set_xlabel("times [s]", fontsize=labelsize)
+        ax4.set_ylabel("action", fontsize=labelsize)
+        ax4.tick_params(axis='x', labelsize=labelsize)
+        ax4.tick_params(axis='y', labelsize=labelsize)
+
+        ax1.set_xlabel(r'$x_1$', fontsize=labelsize)
+        ax1.set_ylabel(r'$x_2$', fontsize=labelsize)
         plt.savefig(str(LOGS_DIR / self.test_log_dir / (str(self.tester.alg.epochs_completed.item()) + '.png')), dpi=300)
 
     @torch.no_grad()

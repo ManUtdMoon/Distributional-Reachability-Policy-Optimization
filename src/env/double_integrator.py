@@ -1,11 +1,9 @@
 from typing import Tuple
-from unittest.loader import VALID_MODULE_NAME
 
 import gym
 from gym.utils import seeding
 import numpy as np
 
-from src.env import batch
 
 
 class DoubleIntegrator(gym.Env):
@@ -23,10 +21,11 @@ class DoubleIntegrator(gym.Env):
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
+        self.action_space.seed(seed)
         return [seed]
 
     def reset(self) -> np.ndarray:
-        self.state = np.random.uniform(low=-5, high=5, size=2)
+        self.state = self.np_random.uniform(low=-5, high=5, size=2)
         if self.id is not None:
             self.state = np.array([-4.8, 4], dtype=np.float32)
         return self._get_obs()

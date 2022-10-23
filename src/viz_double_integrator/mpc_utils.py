@@ -29,14 +29,17 @@ def cum_cost(x_init, u_seq, N):
     
     return cost.item()
 
-def ineq_cons_efr(x_init, u):
+def ineq_cons_efr(x_init, u_seq, N):
     assert x_init.shape == (2, 1)
-    # assert u.shape == (1,) or u.shape == (), print(u.shape)
-    x_next = model(x_init, u)
-    ineq_list = [x_next + 5, 5 - x_next]
-    x1, x2 = x_next
+    u_seq = u_seq.squeeze()
+    assert u_seq.shape == (N,), print(u_seq.shape)
+    u_init = u_seq[0]
+    x_next = model(x_init, u_init)
+    x1, x2 = x_next.squeeze()
+    ineq_list = [x1 + 5, 5 - x1, x2 + 5, 5 - x2]
+    
     x2_max = np.sqrt(2 * (5 - x1) + 1e-4)
-    x2_min = np.sqrt(2 * (5 + x1) + 1e-4)
+    x2_min = -np.sqrt(2 * (5 + x1) + 1e-4)
 
     ineq_list += [x2 - x2_min, x2_max - x2]
     return ineq_list
@@ -62,14 +65,14 @@ def get_action(x_init, N, cons_type='pointwise'):
     if cons_type == 'pointwise':
         ineqcons = lambda u: ineq_cons_pointwise(x_init, u, N, low, high)
     elif cons_type == 'efr':
-        ineqcons = lambda u: ineq_cons_efr(x_init, u)
+        ineqcons = lambda u: ineq_cons_efr(x_init, u, N)
     
     constraints = {'type': 'ineq', 'fun': ineqcons}
     res = minimize(
         lambda u: cum_cost(x_init, u, N), x0, 
         method='SLSQP', 
         bounds=bounds, 
-        # constraints=constraints
+        constraints=constraints
     )
 
     return res.x, res.success
@@ -85,7 +88,7 @@ if __name__ == '__main__':
     x = x_init
     x1, x2 = x
     while abs(x1) > 0.1 or abs(x2) > 0.1:
-        act, flag = get_action(x, horizon, cons_type='pointwise')
+        act, flag = get_action(x, horizon, cons_type='efr')
         x_next = model(x, act[0])
         x = x_next
         x1, x2 = x
