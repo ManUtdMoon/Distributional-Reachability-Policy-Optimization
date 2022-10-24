@@ -26,7 +26,7 @@ class SMBPO(Configurable, Module):
         model_steps = 2000
         model_update_period = 250   # how many steps between updating the models
         save_trajectories = False
-        horizon = 10
+        horizon = 20
         alive_bonus = 1.0   # alternative: positive, rather than negative, reinforcement
         buffer_min = 5000
         buffer_max = 10**6
@@ -44,13 +44,13 @@ class SMBPO(Configurable, Module):
         eval_shield_threshold = -0.05
         eval_shield_type = "linear"
 
-    def __init__(self, config, env_factory, data, epochs):
+    def __init__(self, config, env_factory, data, epochs, seed):
         Configurable.__init__(self, config)
         Module.__init__(self)
         self.data = data
         self.episode_log = TabularLog(log.dir, 'episodes.csv')
 
-        self.real_env = env_factory()
+        self.real_env = env_factory(seed=seed)
         if self.mode == 'train':
             self.eval_env = ProductEnv([env_factory(id=i) for i in range(N_EVAL_TRAJ)])
         elif self.mode == 'test':

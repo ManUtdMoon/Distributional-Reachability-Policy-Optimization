@@ -4,23 +4,24 @@ import gym
 from gym.utils import seeding
 import numpy as np
 
-
+OUT_REWARD = -30.0
+STABLE_REWARD = 30.0
 
 class DoubleIntegrator(gym.Env):
-    def __init__(self, id=None):
+    def __init__(self, id=None, seed=None):
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(2,), dtype=np.float32)
         self.action_space = gym.spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
         self.dt = 0.1
         self.id = id
         self.state = None
-        self.seed()
+        self.seed(seed)
 
         self.con_dim = 4
         self._max_episode_steps = 100
         self.done_on_out = (self.id is None)
 
     def seed(self, seed=None):
-        self.np_random, seed = seeding.np_random(seed)
+        self.np_random = np.random.RandomState(seed)
         self.action_space.seed(seed)
         return [seed]
 
@@ -38,18 +39,20 @@ class DoubleIntegrator(gym.Env):
         new_x2 = x2 + a * self.dt
         self.state[0] = new_x1
         self.state[1] = new_x2
+        rew = self._get_reward(self.state, action)
         if self.done_on_out:
             done = self.check_done(self.state).item()
         else:
             if abs(self.state[0]) < 0.1 and abs(self.state[1]) < 0.1:
                 done = True
+                rew = rew - STABLE_REWARD
             else:
                 done = False
         info = dict(
             violation=self.check_violation(self.state).item(),
             constraint_value=cons_vals,
         )
-        return self._get_obs(), self._get_reward(self.state, action), done, info
+        return self._get_obs(), rew, done, info
 
     def _get_obs(self):
         return np.copy(self.state)
@@ -58,7 +61,12 @@ class DoubleIntegrator(gym.Env):
         x1, x2 = state
         rew_s = - abs(x1) - abs(x2)
         rew_a = - abs(action)
-        return rew_s + 0.05 * rew_a
+        out = self.check_out(state).item()
+        stable = self.check_stable(state).item()
+        rew_out = OUT_REWARD if out else 0.
+        rew_stable = STABLE_REWARD if stable else 0.
+
+        return rew_s + 0.05 * rew_a + rew_out + rew_stable
     
     def get_constraint_values(self, states):
         if len(states.shape) == 1:
@@ -130,7 +138,12 @@ class DoubleIntegrator(gym.Env):
         x1s = states[..., 0]
         x2s = states[..., 1]
         actions = actions.squeeze()
-        rews = - np.abs(x1s) - np.abs(x2s) - 0.05 * np.abs(actions)
+        out = self.check_out(states)
+        stable = self.check_stable(states)
+        rews = - np.abs(x1s) - np.abs(x2s) \
+            - 0.05 * np.abs(actions) \
+            + np.where(out, OUT_REWARD, 0.) \
+            + np.where(stable, STABLE_REWARD, 0.)
         batch_size = states.shape[:-1]
         assert rews.shape == batch_size == actions.shape, print(rews.shape, batch_size, actions.shape)
         return rews

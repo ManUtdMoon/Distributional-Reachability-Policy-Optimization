@@ -5,16 +5,8 @@ from gym.wrappers import RescaleAction
 
 def get_env(env_name, wrap_torch=True, **kwargs):
     from .env.torch_wrapper import TorchWrapper
-    from .env.poles.classic_pendulum import SafeClassicPendulum
-    from .env.poles.inverted_pendulum import SafeInvertedPendulumEnv
-    from .env.quadrotor.quadrotor import QuadrotorWrapperEnv
     from .env.double_integrator import DoubleIntegrator
     envs = {
-        'pendulum-upright': SafeClassicPendulum,
-        'pendulum-tilt': SafeClassicPendulum,
-        'cartpole-upright': SafeInvertedPendulumEnv,
-        'cartpole-move': SafeInvertedPendulumEnv,
-        'quadrotor': QuadrotorWrapperEnv,
         'double_integrator': DoubleIntegrator,
     }
     # if env_name != 'quadrotor':

@@ -73,6 +73,11 @@ class Vizer_set(object):
         # fig 1: traj
         ax1 = plt.subplot(131)
         # --------- get RL policy trajectoiry start --------- #
+        x1 = np.linspace(-5, 5, 101)
+        x2_min = -np.sqrt( 2* (5 + x1))
+        x2_max = np.sqrt( 2* (5 - x1))
+        ax1.plot(x1, x2_min, '-k', linewidth=1)
+        ax1.plot(x1, x2_max, '-k', linewidth=1)
         traj = self._get_eval_traj()
         states = traj[0].get('states').cpu().numpy()
         actions = traj[0].get('actions').cpu().numpy()
