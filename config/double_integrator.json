@@ -12,13 +12,13 @@
       "constraint_critic_cfg": {
         "std_ratio": 2.0
       },
-      "actor_lr": 1e-4,
-      "actor_lr_end": 1e-6,
+      "actor_lr": 1e-5,
+      "actor_lr_end": 1e-8,
       "qc_under_uncertainty": false,
       "distributional_qc": false
     },
-    "steps_per_epoch": 100,
-    "model_update_period": 25,
+    "steps_per_epoch": 160,
+    "model_update_period": 40,
     "model_initial_steps": 500,
     "model_steps": 500,
     "buffer_min": 500,
@@ -27,5 +27,5 @@
     "constraint_scale": 5.0,
     "safe_shield": false
   },
-  "epochs": 200
+  "epochs": 500
 }

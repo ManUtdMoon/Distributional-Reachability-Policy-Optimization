@@ -106,10 +106,11 @@ class Vizer_set(object):
         cbar2 = plt.colorbar(mpc_traj, shrink=0.6, pad=0.02)
         cbar2.ax.tick_params(labelsize=labelsize)
 
+        shared_len = min(len(mpc_res['action']), len(actions.squeeze()))
         # fig 2: x1 traj
         ax2 = plt.subplot(322)
-        ax2.plot(time_step_rl * 0.1, rl_x1)
-        ax2.plot(time_step_mpc * 0.1, mpc_x[:, 0])
+        ax2.plot(time_step_rl[:shared_len] * 0.1, rl_x1[:shared_len])
+        ax2.plot(time_step_mpc[:shared_len] * 0.1, mpc_x[:, 0][:shared_len])
         ax2.set_ylim(-5, 5)
         ax2.tick_params(axis='x', labelsize=labelsize)
         ax2.tick_params(axis='y', labelsize=labelsize)
@@ -117,8 +118,8 @@ class Vizer_set(object):
 
         # fig 3: x2 traj
         ax3  = plt.subplot(324, sharex=ax2)
-        ax3.plot(time_step_rl * 0.1, rl_x2)
-        ax3.plot(time_step_mpc * 0.1, mpc_x[:, 1])
+        ax3.plot(time_step_rl[:shared_len] * 0.1, rl_x2[:shared_len])
+        ax3.plot(time_step_mpc[:shared_len] * 0.1, mpc_x[:, 1][:shared_len])
         ax3.set_ylim(-5, 5)
         ax3.set_ylabel(r'$x_2$', fontsize=labelsize)
         ax3.tick_params(axis='x', labelsize=labelsize)
@@ -126,8 +127,9 @@ class Vizer_set(object):
 
         # fig 4: act traj
         ax4  = plt.subplot(326, sharex=ax2)
-        ax4.plot(time_step_rl * 0.1 + 0.1, actions)
-        ax4.plot(time_step_mpc[1:] * 0.1, mpc_res['action'])
+        ax4.scatter(time_step_rl[:shared_len] * 0.1, actions[:shared_len], c='#1f77b4', s=5)
+        smoothed_mpc = smooth(mpc_res['action'], sm=10)
+        ax4.scatter(time_step_mpc[:shared_len] * 0.1, smoothed_mpc[:shared_len], c='#ff7f0e', s=5)
         ax4.set_xlabel("times [s]", fontsize=labelsize)
         ax4.set_ylabel("action", fontsize=labelsize)
         ax4.tick_params(axis='x', labelsize=labelsize)
@@ -136,12 +138,36 @@ class Vizer_set(object):
         ax1.set_xlabel(r'$x_1$', fontsize=labelsize)
         ax1.set_ylabel(r'$x_2$', fontsize=labelsize)
         plt.savefig(str(LOGS_DIR / self.test_log_dir / (str(self.tester.alg.epochs_completed.item()) + '.png')), dpi=300)
+        
+        print(
+            np.max(
+                np.abs(
+                    smooth(mpc_res['action'], sm=10).squeeze()[:shared_len] - actions.squeeze()[:shared_len]
+                ) / (np.max(smoothed_mpc) - np.min(smoothed_mpc))
+            )
+        )
+        print(
+            np.mean(
+                np.abs(
+                    smooth(mpc_res['action'], sm=10).squeeze()[:shared_len] - actions.squeeze()[:shared_len]
+                ) / (np.max(smoothed_mpc) - np.min(smoothed_mpc))
+            )
+        )
 
     @torch.no_grad()
     def _get_eval_traj(self):
         test_trajs, _ = self.tester.run_evaluation()
         return test_trajs
 
+def smooth(data, sm=1):
+    '''Borrow from
+    https://blog.csdn.net/qq_43280087/article/details/119894398
+    '''
+    if sm > 1:
+        z = np.ones_like(data)
+        y = np.ones(sm)*1.0
+        d = np.convolve(y, data, "same")/np.convolve(y, z, "same")
+    return d
 
 def main():
     # step 1: load config and model

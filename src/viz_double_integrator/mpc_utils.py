@@ -25,7 +25,7 @@ def cum_cost(x_init, u_seq, N):
         u = u_seq[i]  # shape = ()
         x_next = model(x, u)
         x = x_next
-        cost = cost + np.linalg.norm(x, ord=1) + 0.05 * np.abs(u)
+        cost = cost + 0.5 * np.linalg.norm(x, ord=2)**2 + u**2
     
     return cost.item()
 
@@ -92,12 +92,12 @@ if __name__ == '__main__':
         x_next = model(x, act[0])
         x = x_next
         x1, x2 = x
-        cost_traj.append(abs(x1) + abs(x2) + 0.05 * act[0])
+        cost_traj.append(0.5 * abs(x1)**2 + 0.5 * abs(x2)**2 + act[0]**2)
         act_traj.append(act[0])
         x_traj.append(x.squeeze())
         print(x.squeeze())
     mpc_res = {
-        'state': np.array(x_traj),
+        'state': np.array(x_traj)[:-1],
         'action': np.array(act_traj),
         'cost': np.array(cost_traj)
     }

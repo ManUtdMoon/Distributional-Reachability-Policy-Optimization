@@ -5,7 +5,7 @@ from gym.utils import seeding
 import numpy as np
 
 OUT_REWARD = -30.0
-STABLE_REWARD = 30.0
+STABLE_REWARD = 0.0
 
 class DoubleIntegrator(gym.Env):
     def __init__(self, id=None, seed=None):
@@ -17,7 +17,7 @@ class DoubleIntegrator(gym.Env):
         self.seed(seed)
 
         self.con_dim = 4
-        self._max_episode_steps = 100
+        self._max_episode_steps = 160
         self.done_on_out = (self.id is None)
 
     def seed(self, seed=None):
@@ -59,14 +59,14 @@ class DoubleIntegrator(gym.Env):
 
     def _get_reward(self, state, action):
         x1, x2 = state
-        rew_s = - abs(x1) - abs(x2)
-        rew_a = - abs(action)
+        rew_s = - x1**2 - x2**2
+        rew_a = - action**2
         out = self.check_out(state).item()
         stable = self.check_stable(state).item()
         rew_out = OUT_REWARD if out else 0.
         rew_stable = STABLE_REWARD if stable else 0.
 
-        return rew_s + 0.05 * rew_a + rew_out + rew_stable
+        return 0.5 * rew_s + rew_a + rew_out + rew_stable
     
     def get_constraint_values(self, states):
         if len(states.shape) == 1:
@@ -140,8 +140,8 @@ class DoubleIntegrator(gym.Env):
         actions = actions.squeeze()
         out = self.check_out(states)
         stable = self.check_stable(states)
-        rews = - np.abs(x1s) - np.abs(x2s) \
-            - 0.05 * np.abs(actions) \
+        rews = - 0.5 * np.square(x1s) - 0.5 * np.square(x2s) \
+            - np.square(actions) \
             + np.where(out, OUT_REWARD, 0.) \
             + np.where(stable, STABLE_REWARD, 0.)
         batch_size = states.shape[:-1]

@@ -146,7 +146,7 @@ def build_parser():
 
 class Tester(object):
     def __init__(self, cfg, test_log_dir, epoch_id):
-        env_factory = lambda id=None: get_env(cfg.env_name, **{**cfg.env_cfg, **dict(id=id)})
+        env_factory = lambda id=None, seed=None: get_env(cfg.env_name, **{**cfg.env_cfg, **dict(id=id, seed=seed)})
     
         log.setup(test_log_dir)
         log.message(f'Test log directory: {test_log_dir}')
@@ -154,7 +154,7 @@ class Tester(object):
         self.cfg = cfg
         self.test_log_dir = test_log_dir
         self.data = CheckpointableData()
-        self.alg = SMBPO(cfg.alg_cfg, env_factory, self.data, cfg.epochs)
+        self.alg = SMBPO(cfg.alg_cfg, env_factory, self.data, cfg.epochs, None)
         self.checkpointer = Checkpointer(self.alg, log.dir.parent, 'ckpt_{}.pt')
         self.data_checkpointer = Checkpointer(self.data, log.dir.parent, 'data.pt')
         self.load_model(epoch_id)
