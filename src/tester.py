@@ -28,7 +28,7 @@ ROOT_DIR = Path(ROOT_DIR)
 assert ROOT_DIR.is_dir(), ROOT_DIR
 
 
-def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False, safe_shield_threshold=-0.1, shield_type="linear"):
+def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False, safe_shield_threshold=-0.1, shield_type="none"):
     if not isinstance(env, BaseBatchedEnv):
         env = ProductEnv([env])
 

@@ -17,6 +17,16 @@ import numpy as np
 
 from src.env.tracking.pyth_veh3dofconti_data import SimuVeh3dofconti, angle_normalize
 
+'''ref path and u combination
+0: sine ref + sine u
+1: sine ref + constant u (focus)
+2: double lane ref + sine u
+3: double lane ref + constant u (focus)
+4: triangle ref + sine u
+5: triangle ref + constant u
+6: circle ref + sine u
+7: circle ref + constant u
+'''
 
 @dataclass
 class SurrVehicleData:
@@ -46,6 +56,9 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
         surr_veh_num: int = 4,
         veh_length: float = 4.8,
         veh_width: float = 2.0,
+        ref_num: Optional[int] = None,
+        id: Optional[int] = None,
+        render: Optional[bool] = False,
         **kwargs: Any,
     ):
         super().__init__(pre_horizon, path_para, u_para, **kwargs)
@@ -54,9 +67,9 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
         self.observation_space = gym.spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(ego_obs_dim + ref_obs_dim * pre_horizon + surr_veh_num * 4,),
+            shape=(ego_obs_dim + 1 + ref_obs_dim * pre_horizon + surr_veh_num * 4,),
             dtype=np.float32,
-        )
+        )  # 1: ego_phi, necessary for constraint calculation
         self.surr_veh_num = surr_veh_num
         self.surr_vehs: List[SurrVehicleData] = None
         self.surr_state = np.zeros((surr_veh_num, 5), dtype=np.float32)
@@ -69,14 +82,27 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
             }
         )
 
+        self.ref_num = ref_num
+        self.surr_vehs_start_dim = ego_obs_dim + 1 + ref_obs_dim * pre_horizon
+
+        # ----- drpo-related -----
+        self.con_dim = 1
+        self._max_episode_steps = self.max_episode_steps
+        self.done_on_violation = False
+        self._id = id
+        self.is_render = render
+
     def reset(
         self,
         init_state: Optional[Sequence] = None,
         ref_time: Optional[float] = None,
-        ref_num: Optional[int] = None,
         **kwargs,
     ) -> Tuple[np.ndarray, dict]:
-        super().reset(init_state, ref_time, ref_num, **kwargs)
+        if self._id is not None:
+            ref_time = 0.0
+            init_state = np.zeros(6, dtype=np.float32)
+
+        super().reset(init_state, ref_time, self.ref_num, **kwargs)
 
         surr_x0, surr_y0 = self.ref_points[0, :2]
         if self.path_num == 3:
@@ -90,19 +116,27 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
         self.surr_vehs = []
         for _ in range(self.surr_veh_num):
             # avoid ego vehicle
-            while True:
-                # TODO: sample position according to reference trajectory
-                delta_lon = 10 * self.np_random.uniform(-1, 1)
-                delta_lat = 5 * self.np_random.uniform(-1, 1)
-                if abs(delta_lon) > 7 or abs(delta_lat) > 3:
-                    break
+            if self._id is None:
+                while True:
+                    # TODO: sample position according to reference trajectory
+                    delta_lon = 10 * self.np_random.uniform(-1, 1)
+                    delta_lat = 5 * self.np_random.uniform(-1, 1)
+                    if abs(delta_lon) > 7 or abs(delta_lat) > 3:
+                        break
+                surr_u = 5 + self.np_random.uniform(-1, 1)
+            else: # for evaluation and testing
+                # TODO: design specific position for surr
+                delta_lon = 8
+                delta_lat = 3.5
+                surr_u = 4.5
+                print(f"surr {_}: d_lon: {delta_lon}, d_lat: {delta_lat}, u: {surr_u}")
             surr_x = (
                 surr_x0 + delta_lon * np.cos(surr_phi) - delta_lat * np.sin(surr_phi)
             )
             surr_y = (
                 surr_y0 + delta_lon * np.sin(surr_phi) + delta_lat * np.cos(surr_phi)
             )
-            surr_u = 5 + self.np_random.uniform(-1, 1)
+
             self.surr_vehs.append(
                 SurrVehicleData(
                     x=surr_x,
@@ -115,7 +149,7 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
             )
         self.update_surr_state()
 
-        return self.get_obs(), self.info
+        return self.get_obs()
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
         _, reward, done, _ = super().step(action)
@@ -124,7 +158,13 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
             surr_veh.step()
         self.update_surr_state()
 
-        return self.get_obs(), reward, done, self.info
+        info = self.info
+        if self.is_render:
+            info.update({
+                "img": self.render(mode="rgb_array")
+            })
+
+        return self.get_obs(), reward, done.item(), info
 
     def update_surr_state(self):
         for i, surr_veh in enumerate(self.surr_vehs):
@@ -135,10 +175,13 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
 
     def get_obs(self) -> np.ndarray:
         obs = super().get_obs()
+        ego_obs = obs[:6]
+        ref_obs = obs[6:]
+        ego_phi_abs = self.state[2]
         surr_obs = self.surr_state[:, :4] - self.state[np.newaxis, :4]
-        return np.concatenate((obs, surr_obs.flatten()))
+        return np.concatenate((ego_obs, [ego_phi_abs], ref_obs, surr_obs.flatten()))
 
-    def get_constraint(self) -> np.ndarray:
+    def get_constraint(self) -> float:
         # collision detection using bicircle model
         # distance from vehicle center to front/rear circle center
         d = (self.veh_length - self.veh_width) / 2
@@ -180,14 +223,16 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
                     ego_center[np.newaxis, i] - surr_center[:, j], axis=1
                 )
                 min_dist = min(min_dist, np.min(dist))
-
-        return np.array([2 * r - min_dist], dtype=np.float32)
+        return 2 * r - min_dist
 
     @property
     def info(self):
         info = super().info
         info.update(
-            {"surr_state": self.surr_state.copy(), "constraint": self.get_constraint(),}
+            {"surr_state": self.surr_state.copy(), "constraint_value": self.get_constraint(),}
+        )
+        info.update(
+            {"violation": (info["constraint_value"] > 0.).item()}
         )
         return info
 
@@ -201,6 +246,115 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
             ax.add_patch(pc.Rectangle(
                 (surr_x - self.veh_length / 2, surr_y - self.veh_width / 2), self.veh_length, self.veh_width, surr_phi * 180 / np.pi,
                 facecolor='w', edgecolor='k', zorder=1))
+    
+    # ----- below is drpo-related methods, all batched -----
+
+    def check_done(self, states: np.ndarray) -> np.ndarray:
+        if states.ndim == 1:
+            states = states[np.newaxis, ...]
+        assert states.ndim == 2
+
+        error_x = np.abs(states[:, 0])
+        error_y = np.abs(states[:, 1])
+        error_phi = np.abs(states[:, 2])
+        done = np.logical_or(
+            np.logical_or(error_x > 5, error_y > 2), error_phi > np.pi
+        )
+        return np.squeeze(done)
+
+    def check_violation(self, states: np.ndarray) -> np.ndarray:
+        if states.ndim == 1:
+            states = states[np.newaxis, ...]
+        assert states.ndim == 2
+
+        return np.squeeze(self.get_constraint_values(states) > 0)
+
+    def get_constraint_values(self, states: np.ndarray) -> np.ndarray:
+        if states.ndim == 1:
+            states = states[np.newaxis, ...]
+        assert states.ndim == 2
+
+        d = (self.veh_length - self.veh_width) / 2
+        # circle radius
+        r = np.sqrt(2) / 2 * self.veh_width
+        ego_center = np.array([[d, 0], [-d, 0]], dtype=np.float32)  # ego-coord
+
+        # get the coordinates of circle centers of surrounding 
+        # vehicles in ego-coord, shape: (batch_size, surr_veh_num, 2, 2)
+        # the dim of surr_veh starts from self.surr_vehs_start_dim, every 4
+        # dims is a surr_veh, compute the center needs 0:3, i.e., x, y, phi (all relative)
+        phis = states[:, 6]
+        cos_phis = np.expand_dims(np.cos(phis), axis=-1) # shape: (batch_size, 1)
+        sin_phis = np.expand_dims(np.sin(phis), axis=-1) # shape: (batch_size, 1)
+        surrs_rel_earth = states[:, self.surr_vehs_start_dim:].reshape(-1, self.surr_veh_num, 4)
+        surrs_xs_rel_earth = surrs_rel_earth[:, :, 0] # shape: (batch_size, surr_veh_num)
+        surrs_ys_rel_earth = surrs_rel_earth[:, :, 1]
+        surrs_phis_rel = surrs_rel_earth[:, :, 2]
+
+        surrs_xs_rel_ego = surrs_xs_rel_earth * cos_phis + surrs_ys_rel_earth * sin_phis
+        surrs_ys_rel_ego = -surrs_xs_rel_earth * sin_phis + surrs_ys_rel_earth * cos_phis
+        assert surrs_xs_rel_ego.shape[-1] == self.surr_veh_num
+
+        surrs_centers_rel_ego = np.stack(
+            (
+                np.stack(
+                    (
+                        surrs_xs_rel_ego + d * np.cos(surrs_phis_rel),
+                        surrs_ys_rel_ego + d * np.sin(surrs_phis_rel),
+                    ),
+                    axis=2,
+                ),
+                np.stack(
+                    (
+                        surrs_xs_rel_ego - d * np.cos(surrs_phis_rel),
+                        surrs_ys_rel_ego - d * np.sin(surrs_phis_rel),
+                    ),
+                    axis=2,
+                ),
+            ),
+            axis=2,
+        )  # shape: (batch_size, surr_veh_num, 2, 2), 2 * (x, y)
+
+        # increase the dim of ego_center to match the shape of surr_centers
+        ego_center = ego_center[np.newaxis, np.newaxis, ...]
+
+        # compute the distance between ego_center and surr_center, 
+        # shape (batch_size, surr_veh_num)
+        d1 = np.linalg.norm(ego_center[..., 0, :] - surrs_centers_rel_ego[..., 0, :], axis=-1)
+        d2 = np.linalg.norm(ego_center[..., 0, :] - surrs_centers_rel_ego[..., 1, :], axis=-1)
+        d3 = np.linalg.norm(ego_center[..., 1, :] - surrs_centers_rel_ego[..., 0, :], axis=-1)
+        d4 = np.linalg.norm(ego_center[..., 1, :] - surrs_centers_rel_ego[..., 1, :], axis=-1)
+        # get the nearest/smallest distance among d1~4
+        min_dist = np.min(
+            np.min(
+                np.stack((d1, d2, d3, d4), axis=1),
+                axis=-1
+            ),  # shape (batch_size, surr_veh_num)
+            axis=-1
+        )  # shape (batch_size,)
+            
+        # the constraint value is 2 * r - min_dist, shape (batch_size,) or ()
+        return np.squeeze(2 * r - min_dist)
 
 def env_creator(**kwargs):
     return SimuVeh3dofcontiSurrCstr(**kwargs)
+
+if __name__ == "__main__":
+    np.set_printoptions(precision=5, suppress=True)
+    env = SimuVeh3dofcontiSurrCstr(
+        ref_num=1,
+    )
+    s = env.reset()
+    for i in range(100):
+        print(f"-------------- {i} -------------------")
+        act = env.action_space.sample()
+        s_p, r, done, info = env.step(act)
+        # print(f"s_p: {s_p}")
+        # print(info)
+        print(env.check_done(np.tile(s_p, [2,1])))
+        print(env.check_violation(np.tile(s_p, [2,1])))
+
+        assert np.isclose(info['constraint_value'], env.get_constraint_values(s_p), atol=1e-4), \
+            print(f"info: {info['constraint_value']}, get_con_vals: {env.get_constraint_values(s_p)}")
+        if done:
+            break

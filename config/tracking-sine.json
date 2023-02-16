@@ -1,0 +1,35 @@
+{
+  "env_name": "tracking",
+  "env_cfg": {
+    "ref_num": 1,
+    "surr_veh_num": 1
+  },
+  "alg_cfg": {
+    "sac_cfg": {
+      "target_entropy": -1.0,
+      "constraint_threshold": 0.0,
+      "penalty_lb": -5.0,
+      "penalty_ub": 100.0,
+      "mlp_multiplier_cfg": {
+        "upper_bound": 50.0
+      },
+      "constraint_critic_cfg": {
+        "std_ratio": 2.0
+      },
+      "actor_lr": 1e-4,
+      "actor_lr_end": 1e-7,
+      "qc_under_uncertainty": false,
+      "distributional_qc": false
+    },
+    "steps_per_epoch": 200,
+    "model_update_period": 50,
+    "model_initial_steps": 2000,
+    "model_steps": 1000,
+    "buffer_min": 1000,
+    "reward_scale": 10.0,
+    "alive_bonus": 2.0,
+    "constraint_scale": 5.0,
+    "safe_shield": false
+  },
+  "epochs": 100
+}

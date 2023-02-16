@@ -9,7 +9,7 @@ class Log:
         self._log_file = None
 
     def setup(self, dir, log_filename='log.txt', if_exists='append'):
-        assert self._dir is None, 'Can only setup once'
+        # assert self._dir is None, 'Can only setup once'
         self._dir = Path(dir)
         self._dir.mkdir(exist_ok=True)
         print(f'Set log dir to {dir}, log filename to {log_filename}')

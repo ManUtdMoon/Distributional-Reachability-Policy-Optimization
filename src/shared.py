@@ -12,6 +12,7 @@ def get_env(env_name, wrap_torch=True, **kwargs):
     from .env.poles.classic_pendulum import SafeClassicPendulum
     from .env.poles.inverted_pendulum import SafeInvertedPendulumEnv
     from .env.quadrotor.quadrotor import QuadrotorWrapperEnv
+    from .env.tracking.pyth_veh3dofconti_surrcstr_data import SimuVeh3dofcontiSurrCstr
     envs = {
         'hopper': HopperNoBonusEnv,
         'cheetah-no-flip': CheetahNoFlipEnv,
@@ -21,7 +22,8 @@ def get_env(env_name, wrap_torch=True, **kwargs):
         'pendulum-tilt': SafeClassicPendulum,
         'cartpole-upright': SafeInvertedPendulumEnv,
         'cartpole-move': SafeInvertedPendulumEnv,
-        'quadrotor': QuadrotorWrapperEnv
+        'quadrotor': QuadrotorWrapperEnv,
+        'tracking': SimuVeh3dofcontiSurrCstr,
     }
     # if env_name != 'quadrotor':
     #     assert 'id' in kwargs.keys()

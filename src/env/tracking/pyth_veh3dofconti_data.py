@@ -221,8 +221,8 @@ class SimuVeh3dofconti(PythBaseEnv):
         self.ref_points[-1] = new_ref_point
 
         self.done = self.judge_done()
-        if self.done:
-            reward = reward - 100
+        # if self.done:
+        #     reward = reward - 100
 
         return self.get_obs(), reward, self.done, self.info
 
@@ -262,11 +262,15 @@ class SimuVeh3dofconti(PythBaseEnv):
     def judge_done(self) -> bool:
         x, y, phi = self.state[:3]
         ref_x, ref_y, ref_phi = self.ref_points[0, :3]
-        done = (
-            (np.abs(x - ref_x) > 5)
-            | (np.abs(y - ref_y) > 2)
-            | (np.abs(angle_normalize(phi - ref_phi)) > np.pi)
-        )
+
+        # use distance in ego coordinates to judge done
+        cos_tf = np.cos(-phi)
+        sin_tf = np.sin(-phi)
+        ref_x_tf = (ref_x - x) * cos_tf - (ref_y - y) * sin_tf
+        ref_y_tf = (ref_x - x) * sin_tf + (ref_y - y) * cos_tf
+        ref_phi_tf = angle_normalize(ref_phi - phi)
+
+        done = (np.abs(ref_x_tf) > 5) | (np.abs(ref_y_tf) > 2) | (np.abs(ref_phi_tf) > np.pi)
         return done
 
     @property

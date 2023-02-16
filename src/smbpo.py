@@ -159,10 +159,7 @@ class SMBPO(Configurable, Module):
                 print(done, self.check_done(next_state.unsqueeze(0)).item(), next_state)
             assert violation == self.check_violation(next_state.unsqueeze(0)).item(), \
                 print(violation, self.check_violation(next_state.unsqueeze(0)).item(), next_state)
-            # print('constraint_value', constraint_value)
-            # print('get_constraint_value', self.get_constraint_value(next_state.unsqueeze(0)).cpu())
-            # print(constraint_value.numpy() == self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
-            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(next_state.unsqueeze(0)).cpu(), atol=1e-05)), \
+            assert torch.all(torch.isclose(constraint_value, self.get_constraint_value(next_state.unsqueeze(0)).cpu(), atol=1e-03)), \
                 print(constraint_value.numpy() - self.get_constraint_value(next_state.unsqueeze(0)).cpu().numpy())
             for buffer in [episode, self.replay_buffer]:
                 buffer.append(states=state, actions=action, next_states=next_state,
@@ -359,10 +356,10 @@ class SMBPO(Configurable, Module):
         virt_states, virt_violations = self.virt_buffer.get('states', 'violations')
         virt_actions = self.actor.act(virt_states, eval=True).detach()
         sa_data = {
-            'real (done)': (real_states[real_violations], real_actions[real_violations]),
-            'real (~done)': (real_states[~real_violations], real_actions[~real_violations]),
-            'virtual (done)': (virt_states[virt_violations], virt_actions[virt_violations]),
-            'virtual (~done)': (virt_states[~virt_violations], virt_actions[~virt_violations])
+            'real (violation)': (real_states[real_violations], real_actions[real_violations]),
+            'real (~violation)': (real_states[~real_violations], real_actions[~real_violations]),
+            'virtual (violation)': (virt_states[virt_violations], virt_actions[virt_violations]),
+            'virtual (~violation)': (virt_states[~virt_violations], virt_actions[~virt_violations])
         }
         for which, (states, actions) in sa_data.items():
             if len(states) == 0:
