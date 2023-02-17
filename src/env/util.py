@@ -1,6 +1,8 @@
 from gym.spaces import Box, Discrete
+from typing import Any, Dict
 import numpy as np
 
+InfoDict = Dict[str, Any]
 
 def isbox(space):
     return isinstance(space, Box)

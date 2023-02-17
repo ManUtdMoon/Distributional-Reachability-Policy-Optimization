@@ -95,6 +95,51 @@ def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False, safe_shi
 
         states.copy_(_next_states)
 
+def mpc_sample_episodes_batched_with_infos(env, controller, n_traj, eval=True):
+
+    state_dim, action_dim, _ = env_dims(env)
+    discrete_actions = isdiscrete(env.action_space)
+    traj_buffer_factory = lambda: SafetySampleBuffer(state_dim, 1 if discrete_actions else action_dim, env.max_episode_steps,
+                                                     discrete_actions=discrete_actions)
+    traj_buffers = [traj_buffer_factory() for _ in range(1)]
+    info_buffers = [[] for _ in range(1)]
+    complete_episodes = []
+    complete_info_per_episode = []
+    states, infos = env.reset(return_info = True)
+    while True:
+        actions = controller(states, infos)
+
+        next_states, rewards, dones, infos = env.step(actions)
+        # violations = [info['violation'] for info in infos]
+        violations = [False]
+        _next_states = next_states.copy()
+        reset_indices = []
+
+        for i in range(1):
+            traj_buffers[i].append(states=torch.tensor(states), actions=torch.tensor(actions), next_states=torch.tensor(next_states),
+                                   rewards=torch.tensor(rewards), dones=torch.tensor(dones), violations=torch.tensor(violations))
+            info_buffers[i].append(infos)
+            if dones or len(traj_buffers[i]) == env._max_episode_steps:
+                complete_episodes.append(traj_buffers[i])
+                complete_info_per_episode.append(
+                    dict(
+                        zip(infos.keys(), [[info[key] for info in info_buffers[i]] for key in infos.keys()])
+                    )
+                )
+                if len(complete_episodes) == n_traj:
+                    # Done!
+                    assert len(complete_info_per_episode) == n_traj
+                    return complete_episodes, complete_info_per_episode
+
+                reset_indices.append(i)
+                traj_buffers[i] = traj_buffer_factory()
+                info_buffers[i] = []
+
+        if reset_indices:
+            reset_indices = np.array(reset_indices)
+            _next_states[reset_indices] = env.partial_reset(reset_indices)
+
+        states = _next_states.copy()
 
 class Config(BaseConfig):
     env_name = Require(str)
