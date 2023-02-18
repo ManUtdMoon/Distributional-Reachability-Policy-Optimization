@@ -14,10 +14,10 @@
         "upper_bound": 50.0
       },
       "constraint_critic_cfg": {
-        "std_ratio": 2.0
+        "std_ratio": 1.0
       },
       "actor_lr": 1e-4,
-      "actor_lr_end": 1e-7,
+      "actor_lr_end": 0.0,
       "qc_under_uncertainty": false,
       "distributional_qc": false
     },
@@ -26,10 +26,10 @@
     "model_initial_steps": 2000,
     "model_steps": 1000,
     "buffer_min": 1000,
-    "reward_scale": 10.0,
+    "reward_scale": 20.0,
     "alive_bonus": 2.0,
     "constraint_scale": 5.0,
     "safe_shield": false
   },
-  "epochs": 100
+  "epochs": 500
 }

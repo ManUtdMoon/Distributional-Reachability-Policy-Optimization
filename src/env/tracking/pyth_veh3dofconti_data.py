@@ -255,8 +255,8 @@ class SimuVeh3dofconti(PythBaseEnv):
             + 0.02 * angle_normalize(phi - ref_phi) ** 2
             + 0.02 * (u - ref_u) ** 2
             + 0.01 * w ** 2
-            + 0.01 * steer ** 2
-            + 0.01 * a_x ** 2
+            + 0.8 * steer ** 2
+            + 0.1 * a_x ** 2
         )
 
     def judge_done(self) -> bool:

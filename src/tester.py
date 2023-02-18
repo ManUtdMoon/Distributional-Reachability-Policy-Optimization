@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 import os
 import json
 import datetime
+import time
 from pathlib import Path
 import sys
 
@@ -43,6 +44,8 @@ def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False, safe_shi
 
     states = env.reset()
     while True:
+        # compute the time consumed to get the action
+        t0 = time.time()
         actions_performance = policy.act(states, eval=eval)
         # -------- safety shield ----------- #
         if eval:
@@ -61,7 +64,7 @@ def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False, safe_shi
                     actions = torch.where(safe_bool, action_mix, actions)
             else:
                 actions = actions_performance
-
+        t1 = time.time()
 
         next_states, rewards, dones, infos = env.step(actions)
         violations = [info['violation'] for info in infos]
@@ -70,6 +73,8 @@ def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False, safe_shi
         reset_indices = []
 
         for i in range(env.n_envs):
+            if i == 0:
+                infos[i].update({'time': t1-t0})
             traj_buffers[i].append(states=states[i], actions=actions[i], next_states=next_states[i],
                                    rewards=rewards[i], dones=dones[i], violations=violations[i])
             info_buffers[i].append(infos[i])
@@ -107,9 +112,13 @@ def mpc_sample_episodes_batched_with_infos(env, controller, n_traj, eval=True):
     complete_info_per_episode = []
     states, infos = env.reset(return_info = True)
     while True:
+        # compute the time when the controller get the actions
+        t0 = time.time()
         actions = controller(states, infos)
+        t1 = time.time()
 
         next_states, rewards, dones, infos = env.step(actions)
+        infos.update({'time': t1-t0})
         # violations = [info['violation'] for info in infos]
         violations = [False]
         _next_states = next_states.copy()
