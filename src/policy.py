@@ -98,3 +98,22 @@ class SquashedGaussianPolicy(TorchPolicy):
 
     def _special_eval(self, distr):
         return distr.mean
+    
+class IncrementalSquashedGaussianPolicy(SquashedGaussianPolicy):
+    def __init__(self, net, act_increment=0.1, log_std_bounds=(-6,4), std_multiplier=1.0):
+        super().__init__(net, log_std_bounds, std_multiplier)
+        self.register_buffer('act_increment', torch.tensor(act_increment, dtype=torch.float32, device=device))
+    
+    def distr(self, states):
+        logits = self.net(states)
+        increment, log_std = logits.chunk(2, dim=-1)
+        act_dim = int(increment.shape[-1])
+        assert increment.shape[-1] == self.act_increment.shape[0]
+        logits = torch.cat(
+            [
+                torch.tanh(increment) * self.act_increment + states[..., -act_dim:],  # shape (batch_size, act_dim)
+                log_std, # shape (batch_size, act_dim)
+            ],
+            dim=-1
+        ) # shape (batch_size, 2 * act_dim)
+        return self._distr(logits)

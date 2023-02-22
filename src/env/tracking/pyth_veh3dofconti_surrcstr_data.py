@@ -67,7 +67,7 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
         self.observation_space = gym.spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(ego_obs_dim + 1 + ref_obs_dim * pre_horizon + surr_veh_num * 4,),
+            shape=(ego_obs_dim + 1 + ref_obs_dim * pre_horizon + surr_veh_num * 4 + 2,),
             dtype=np.float32,
         )  # 1: ego_phi, necessary for constraint calculation
         self.surr_veh_num = surr_veh_num
@@ -91,6 +91,8 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
         self.done_on_violation = False
         self._id = id
         self.is_render = render
+
+        self.action_last_step = np.zeros(2, dtype=np.float32)
 
     def reset(
         self,
@@ -149,6 +151,8 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
             )
         self.update_surr_state()
 
+        self.action_last_step = np.zeros(2, dtype=np.float32)
+
         return self.get_obs()
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
@@ -163,6 +167,12 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
             info.update({
                 "img": self.render(mode="rgb_array")
             })
+        # # penalize delta action
+        # assert action.shape == self.action_last_step.shape == (2,)
+        # d_steer = action[0] - self.action_last_step[0]
+        # d_ax = action[1] - self.action_last_step[1]
+        # reward -= (0.01 * np.abs(d_steer / self.dt) + 0.005 * np.abs(d_ax / self.dt))
+        # self.action_last_step = action
 
         return self.get_obs(), reward, done.item(), info
 
@@ -179,7 +189,7 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
         ref_obs = obs[6:]
         ego_phi_abs = self.state[2]
         surr_obs = self.surr_state[:, :4] - self.state[np.newaxis, :4]
-        return np.concatenate((ego_obs, [ego_phi_abs], ref_obs, surr_obs.flatten()))
+        return np.concatenate((ego_obs, [ego_phi_abs], ref_obs, surr_obs.flatten(), self.action_last_step))
 
     def get_constraint(self) -> float:
         # collision detection using bicircle model
@@ -286,7 +296,7 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
         phis = states[:, 6]
         cos_phis = np.expand_dims(np.cos(phis), axis=-1) # shape: (batch_size, 1)
         sin_phis = np.expand_dims(np.sin(phis), axis=-1) # shape: (batch_size, 1)
-        surrs_rel_earth = states[:, self.surr_vehs_start_dim:].reshape(-1, self.surr_veh_num, 4)
+        surrs_rel_earth = states[:, self.surr_vehs_start_dim:-2].reshape(-1, self.surr_veh_num, 4)
         surrs_xs_rel_earth = surrs_rel_earth[:, :, 0] # shape: (batch_size, surr_veh_num)
         surrs_ys_rel_earth = surrs_rel_earth[:, :, 1]
         surrs_phis_rel = surrs_rel_earth[:, :, 2]
@@ -351,8 +361,8 @@ if __name__ == "__main__":
         s_p, r, done, info = env.step(act)
         # print(f"s_p: {s_p}")
         # print(info)
-        print(env.check_done(np.tile(s_p, [2,1])))
-        print(env.check_violation(np.tile(s_p, [2,1])))
+        print(act, s_p[-2:])
+        # print(env.check_violation(np.tile(s_p, [2,1])))
 
         assert np.isclose(info['constraint_value'], env.get_constraint_values(s_p), atol=1e-4), \
             print(f"info: {info['constraint_value']}, get_con_vals: {env.get_constraint_values(s_p)}")

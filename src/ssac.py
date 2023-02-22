@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from .config import BaseConfig, Configurable, Optional
 from .defaults import ACTOR_LR, OPTIMIZER
 from .log import default_log as log
-from .policy import BasePolicy, SquashedGaussianPolicy
+from .policy import BasePolicy, SquashedGaussianPolicy, IncrementalSquashedGaussianPolicy
 from .torch_util import device, Module, mlp, update_ema, freeze_module, torchify
 from .util import pythonic_mean
 
@@ -156,6 +156,8 @@ class SSAC(BasePolicy, Module):
         qc_td_bound = 5.
         distributional_qc = True
 
+        act_increment = [0.2, 0.05]
+
     def __init__(self, config, state_dim, action_dim, con_dim, 
                  horizon, epochs, steps_per_epoch, solver_updates_per_step,
                  constraint_scale, env_factory, model_ensemble,
@@ -181,10 +183,14 @@ class SSAC(BasePolicy, Module):
         self.model_ensemble = model_ensemble
 
         # -------- actor & critic (incl. constraint) -------- #
-        self.actor = SquashedGaussianPolicy(mlp(
+        self.actor = IncrementalSquashedGaussianPolicy(mlp(
+            [state_dim, *([self.hidden_dim] * self.hidden_layers), action_dim*2]
+            ),
+            self.act_increment
+        )
+        self.actor_safe = SquashedGaussianPolicy(mlp(
             [state_dim, *([self.hidden_dim] * self.hidden_layers), action_dim*2]
         ))
-        self.actor_safe = copy.deepcopy(self.actor)
         self.critic = CriticEnsemble(self.critic_cfg, state_dim, action_dim)
         self.critic_target = copy.deepcopy(self.critic)
         freeze_module(self.critic_target)
