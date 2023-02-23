@@ -70,6 +70,11 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
             shape=(ego_obs_dim + 1 + ref_obs_dim * pre_horizon + surr_veh_num * 4 + 2,),
             dtype=np.float32,
         )  # 1: ego_phi, necessary for constraint calculation
+        self.action_space = gym.spaces.Box(
+            low=np.array([-np.pi/6, -0.1]),
+            high=np.array([np.pi/6, 0.1]),
+            dtype=np.float32,
+        )
         self.surr_veh_num = surr_veh_num
         self.surr_vehs: List[SurrVehicleData] = None
         self.surr_state = np.zeros((surr_veh_num, 5), dtype=np.float32)
@@ -128,9 +133,9 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
                 surr_u = 5 + self.np_random.uniform(-1, 1)
             else: # for evaluation and testing
                 # TODO: design specific position for surr
-                delta_lon = 8
+                delta_lon = 0 # 8 for sine
                 delta_lat = 3.5
-                surr_u = 4.5
+                surr_u = 6 # 4.5 for sine
                 print(f"surr {_}: d_lon: {delta_lon}, d_lat: {delta_lat}, u: {surr_u}")
             surr_x = (
                 surr_x0 + delta_lon * np.cos(surr_phi) - delta_lat * np.sin(surr_phi)

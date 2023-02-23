@@ -314,8 +314,8 @@ class SMBPO(Configurable, Module):
             self.update_models(self.model_initial_steps)
         # learn qc*, actor_safe
         log.message(f'Collecting initial virtual data')
-        while len(self.virt_buffer) < self.buffer_min:
-            self.rollout(self.uniform_policy)
+        # while len(self.virt_buffer) < self.buffer_min:
+        #     self.rollout(self.uniform_policy)
         log.message(f'Setup done!')
 
     def epoch(self):

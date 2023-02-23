@@ -141,9 +141,9 @@ class SimuVeh3dofcontiSurrCstr2(SimuVeh3dofconti):
                 surr_u = 5 + self.np_random.uniform(-1, 1)
             else: # for evaluation and testing
                 # TODO: design specific position for surr
-                delta_lon = 8
+                delta_lon = 0 # 8 for sine
                 delta_lat = 3.5
-                surr_u = 4.5
+                surr_u = 6 # 4.5 for sine
                 print(f"surr {_}: d_lon: {delta_lon}, d_lat: {delta_lat}, u: {surr_u}")
             surr_x = (
                 surr_x0 + delta_lon * np.cos(surr_phi) - delta_lat * np.sin(surr_phi)

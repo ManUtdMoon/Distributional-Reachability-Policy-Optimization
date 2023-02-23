@@ -53,14 +53,23 @@ def main(cfg):
         # So that we can compare to the performance of randomly initialized policy
         eval_tabular_log.row(alg.evaluate())
 
+    best_res = -1e9
+    best_epoch = -1
     while alg.epochs_completed < cfg.epochs:
         log(f'Beginning epoch {alg.epochs_completed+1}')
         alg.epoch()
-        eval_tabular_log.row(alg.evaluate())
+        eval_res = alg.evaluate()
+        eval_tabular_log.row(eval_res)
+        curr_res = eval_res['eval return mean'] + eval_res['eval length mean'] * alg.alive_bonus
+        if curr_res > best_res:
+            best_res = curr_res
+            best_epoch = alg.epochs_completed
+            checkpointer.save(alg.epochs_completed)
 
         if alg.epochs_completed % SAVE_PERIOD == 0:
             checkpointer.save(alg.epochs_completed)
             data_checkpointer.save()
+    log(f"Best result {best_res} at epoch {best_epoch}.")
 
 
 if __name__ == '__main__':
