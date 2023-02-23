@@ -1,11 +1,12 @@
 {
-  "env_name": "cartpole-move",
+  "env_name": "tracking",
   "env_cfg": {
-    "task": "move"
+    "ref_num": 3,
+    "surr_veh_num": 1
   },
   "alg_cfg": {
     "sac_cfg": {
-      "target_entropy": -1.0,
+      "target_entropy": -2.0,
       "constraint_threshold": 0.0,
       "penalty_lb": -5.0,
       "penalty_ub": 100.0,
@@ -13,22 +14,24 @@
         "upper_bound": 50.0
       },
       "constraint_critic_cfg": {
-        "std_ratio": 2.0
+        "std_ratio": 1.0
       },
       "actor_lr": 1e-4,
-      "actor_lr_end": 4e-5,
+      "actor_lr_end": 1e-7,
       "qc_under_uncertainty": false,
       "distributional_qc": false
     },
-    "steps_per_epoch": 1000,
-    "model_update_period": 250,
+    "steps_per_epoch": 200,
+    "model_update_period": 50,
     "model_initial_steps": 2000,
     "model_steps": 1000,
     "buffer_min": 1000,
-    "reward_scale": 1.0,
-    "alive_bonus": 0.0,
-    "constraint_scale": 100.0,
-    "safe_shield": false
+    "reward_scale": 20.0,
+    "alive_bonus": 2.0,
+    "constraint_scale": 5.0,
+    "safe_shield": false,
+    "horizon": 1,
+    "real_fraction": 1.0
   },
-  "epochs": 50
+  "epochs": 200
 }

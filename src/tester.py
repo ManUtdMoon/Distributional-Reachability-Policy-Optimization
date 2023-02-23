@@ -28,8 +28,8 @@ from src.sampling import BaseBatchedEnv, ProductEnv, env_dims, isdiscrete, Safet
 ROOT_DIR = Path(ROOT_DIR)
 assert ROOT_DIR.is_dir(), ROOT_DIR
 
-
-def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False, safe_shield_threshold=-0.1, shield_type="none"):
+@torch.no_grad()
+def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False, safe_shield_threshold=-0.1, shield_type="none", print_lam=False):
     if not isinstance(env, BaseBatchedEnv):
         env = ProductEnv([env])
 
@@ -51,6 +51,10 @@ def sample_episodes_batched_with_infos(env, policy, n_traj, eval=False, safe_shi
         if eval:
             qcs = policy._get_qc(policy.constraint_critic(states, actions_performance))
             actions_safe = policy.actor_safe.act(states, eval=eval)
+            if print_lam:
+                safe_qcs = policy._get_qc(policy.constraint_critic(states, actions_safe))
+                lams = policy.multiplier(states, safe_qcs)
+                print(lams.cpu().numpy().squeeze())
             if shield_type == "safe":
                 danger_bool = (qcs > safe_shield_threshold).tile((action_dim, 1)).t()
                 actions = torch.where(danger_bool, actions_safe, actions_performance)
@@ -227,10 +231,11 @@ class Tester(object):
         else:
             log('Data load failed')
 
-    def run_evaluation(self):
+    def run_evaluation(self, print_lam=False):
         test_traj, info_per_traj = sample_episodes_batched_with_infos(
             self.alg.eval_env,
-            self.alg.solver, 1, eval=True
+            self.alg.solver, 1, eval=True,
+            print_lam=print_lam
         )
 
         lengths = [len(traj) for traj in test_traj]
