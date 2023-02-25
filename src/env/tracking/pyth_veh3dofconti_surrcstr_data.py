@@ -101,6 +101,7 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
         if self._id is not None:
             ref_time = 0.0
             init_state = np.zeros(6, dtype=np.float32)
+            init_state[3] = -1.0
 
         super().reset(init_state, ref_time, self.ref_num, **kwargs)
 
@@ -126,9 +127,9 @@ class SimuVeh3dofcontiSurrCstr(SimuVeh3dofconti):
                 surr_u = 5 + self.np_random.uniform(-1, 1)
             else: # for evaluation and testing
                 # TODO: design specific position for surr
-                delta_lon = 0 # 8 for sine
+                delta_lon = 8 # 8 for sine, 0 for double_lane
                 delta_lat = 3.5
-                surr_u = 6 # 4.5 for sine
+                surr_u = 4.5 # 4.5 for sine, 6 for double_lane
                 print(f"surr {_}: d_lon: {delta_lon}, d_lat: {delta_lat}, u: {surr_u}")
             surr_x = (
                 surr_x0 + delta_lon * np.cos(surr_phi) - delta_lat * np.sin(surr_phi)

@@ -16,7 +16,7 @@
       "constraint_critic_cfg": {
         "std_ratio": 1.0
       },
-      "actor_lr": 1e-4,
+      "actor_lr": 5e-5,
       "actor_lr_end": 1e-7,
       "qc_under_uncertainty": false,
       "distributional_qc": false
@@ -33,5 +33,5 @@
     "horizon": 1,
     "real_fraction": 1.0
   },
-  "epochs": 200
+  "epochs": 100
 }
