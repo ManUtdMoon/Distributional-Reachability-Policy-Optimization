@@ -235,7 +235,8 @@ class Tester(object):
         test_traj, info_per_traj = sample_episodes_batched_with_infos(
             self.alg.eval_env,
             self.alg.solver, 1, eval=True,
-            print_lam=print_lam
+            print_lam=print_lam,
+            shield_type='linear'
         )
 
         lengths = [len(traj) for traj in test_traj]
