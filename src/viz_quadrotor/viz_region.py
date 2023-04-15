@@ -318,7 +318,7 @@ class Vizer_set(object):
 
         fig.supxlabel('x')
         fig.supylabel('z')
-        plt.savefig(str(LOGS_DIR / self.test_log_dir / (metric + str(self.tester.alg.epochs_completed.item()) + '.png')), dpi=300)
+        plt.savefig(str(LOGS_DIR / self.test_log_dir / (metric + str(self.tester.alg.epochs_completed.item()) + '.pdf')), dpi=300)
 
 def main():
     # step 1: load config and model
