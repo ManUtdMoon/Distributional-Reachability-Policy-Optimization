@@ -117,6 +117,7 @@ class SMBPO(Configurable, Module):
         episode = self._create_buffer(max_episode_steps)
         state = self.real_env.reset()
         while True:
+            scaled_state = self.scale_one_state(state)
             t = self.steps_sampled.item()
             if t >= self.buffer_min:
                 policy = self.actor
@@ -125,19 +126,19 @@ class SMBPO(Configurable, Module):
                 if t % self.model_update_period == 0:
                     self.update_models(self.model_steps)
                 self.rollout_and_update()
-                action = policy.act1(state, eval=False)
+                action = policy.act1(scaled_state, eval=False)
 
                 # -------- safety shield ----------- #
                 if self.safe_shield:
                     qc = self.solver._get_qc(
                         constraint_critic(
-                            state.unsqueeze(0),
+                            scaled_state.unsqueeze(0),
                             action.unsqueeze(0),
                             uncertainty=self.solver.distributional_qc
                         )
                     )
                     if qc > self.safe_shield_threshold:
-                        action = policy_safe.act1(state, eval=True)
+                        action = policy_safe.act1(scaled_state, eval=True)
                     
                     # search for safe action if actor_safe is not safe, but maybe useless
                     # qc_safe = torch.max(constraint_critic(state.unsqueeze(0), action.unsqueeze(0)))
@@ -155,7 +156,7 @@ class SMBPO(Configurable, Module):
 
             else:
                 policy = self.uniform_policy
-                action = policy.act1(state, eval=False)
+                action = policy.act1(scaled_state, eval=False)
             next_state, reward, done, info = self.real_env.step(action)
             violation = info['violation']
             constraint_value = torch.tensor(info['constraint_value'], dtype=torch.float)
@@ -194,14 +195,11 @@ class SMBPO(Configurable, Module):
             # to avoid small values hindering faster learning, must correspond to the 
             # buf_constrain_value calculation above
             assert len(state.shape) == len(next_state.shape) == 1
-            if state[-1] > 0:
-                state[-1] = state[-1] * self.constraint_scale + self.constraint_offset
-            if next_state[-1] > 0:
-                next_state[-1] = next_state[-1] * self.constraint_scale + self.constraint_offset
+            scaled_state = self.scale_one_state(state)
+            scaled_next_state = self.scale_one_state(next_state)
             # -------------- reward & constraint value preprocess -------------- #
 
             goal_met = ('goal_met' in info_keys)
-            computed_reward = self.get_reward(state.unsqueeze(0), action.unsqueeze(0), next_state.unsqueeze(0)).cpu()
 
             # assert torch.isclose(torch.tensor(reward), computed_reward, atol=1e-05) or goal_met, \
             #     print(reward - computed_reward.numpy().item(), reward, computed_reward.numpy().item(), goal_met)
@@ -213,7 +211,7 @@ class SMBPO(Configurable, Module):
             episode.append(states=state, actions=action, next_states=next_state,
                            rewards=reward+float(goal_met), dones=done or goal_met, violations=violation,
                            constraint_values=constraint_value, goal_mets=goal_met)
-            self.replay_buffer.append(states=state, actions=action, next_states=next_state,
+            self.replay_buffer.append(states=scaled_state, actions=action, next_states=scaled_next_state,
                                       rewards=buf_reward, dones=done or goal_met, violations=violation,
                                       constraint_values=buf_constraint_value, goal_mets=goal_met)
             self.steps_sampled += 1
@@ -514,3 +512,13 @@ class SMBPO(Configurable, Module):
             'eval length std': length_std,
             'eval violation mean': violation_mean
         }
+
+    def scale_one_state(self, state):
+        '''scale the constraint dim of one state, only for safety-gym
+        '''
+        assert state.ndim == 1
+        scaled_state = state.clone()
+        if scaled_state[-1] > 0:
+            scaled_state[-1] = scaled_state[-1] * self.constraint_scale + self.constraint_offset
+
+        return scaled_state
