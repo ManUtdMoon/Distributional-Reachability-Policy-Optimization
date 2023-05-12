@@ -14,6 +14,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import colors, rcParams
 import matplotlib.font_manager as fm
+from matplotlib.ticker import MaxNLocator
 
 import torch
 
@@ -29,17 +30,17 @@ assert str(ROOT_DIR) == str(PROJ_DIR)
 assert ROOT_DIR.is_dir(), ROOT_DIR
 LOGS_DIR = ROOT_DIR / 'logs' / 'quadrotor'
 
-fm.fontManager.addfont(str(PROJ_DIR / 'arial.ttf'))
-plt.rcParams['font.sans-serif'] = ['Arial']
-plt.rcParams['font.family'] = 'Arial'
-
-params={'font.family': 'Arial',
-        # 'font.serif': 'Times New Roman',
-        # 'font.style': 'italic',
-        # 'font.weight': 'normal', #or 'blod'
-        'font.size': 15,  # or large,small
-        }
+fm.fontManager.addfont('/home/yudongjie/times.ttf')
+fm.fontManager.addfont('/home/yudongjie/SIMSUN.ttf')
+params = {
+    "font.family":'serif',
+    "font.size": 14,
+    "mathtext.fontset":'stix',
+    "font.serif": ['SimSun'],
+}
 rcParams.update(params)
+
+fontdict = {'family':'Times New Roman', 'size': 12}
 
 
 def _generate_ref_trj(
@@ -317,18 +318,31 @@ class Vizer_set(object):
                 sub_ax.plot(goal_x, goal_y, color='black', linestyle='solid', linewidth=0.5)
 
                 sub_ax.set_yticks(np.linspace(-2.0, 2.0, 3))
+                sub_ax.set_xticks(np.linspace(-2.0, 2.0, 3))
+                sub_ax.set_xlabel(r'横坐标$x$', fontsize=12)
+                sub_ax.set_ylabel(r'纵坐标$y$', fontsize=12)
+
+                xticks = np.around(sub_ax.get_xticks(), 3)
+                sub_ax.set_xticklabels(xticks, fontdict=fontdict)
+                yticks = np.around(sub_ax.get_yticks(), 3)
+                sub_ax.set_yticklabels(yticks, fontdict=fontdict)
+
                 ct_list.append(ct)
                 name_list = ["Left", "Up", "Right"]
-                sub_ax.set_title(name_list[i], fontsize=13)
+                # sub_ax.set_title(name_list[i], fontsize=13)
                 sub_ax.tick_params(labelsize=10)
                 axes_list.append(sub_ax)
 
             # cax = add_right_cax(sub_ax, pad=0.01, width=0.02)
-            plt.colorbar(ct_list[1], ax=axes_list,
-                         shrink=0.7, pad=0.02)
+            cb = plt.colorbar(ct_list[1], ax=axes_list,
+                              shrink=0.7, pad=0.02)
+            for t in cb.ax.get_yticklabels():
+                t.set_fontfamily("Times New Roman")
+                t.set_fontsize(12)
+            
 
-        fig.supxlabel('x', fontsize=12)
-        fig.supylabel('y', fontsize=12)
+        # fig.supxlabel('x', fontsize=12)
+        # fig.supylabel('y', fontsize=12)
         plt.savefig(str(LOGS_DIR / self.test_log_dir / (metric + str(self.tester.alg.epochs_completed.item()) + '.pdf')), dpi=300)
 
 def main():
