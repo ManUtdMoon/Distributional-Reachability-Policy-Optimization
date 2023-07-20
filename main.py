@@ -61,6 +61,8 @@ def main(cfg):
         if alg.epochs_completed % SAVE_PERIOD == 0:
             checkpointer.save(alg.epochs_completed)
             data_checkpointer.save()
+            
+    alg.replay_buffer.save_h5py(log.dir/f"real_buffer-{alg.epochs_completed}.h5py")
 
 
 if __name__ == '__main__':
