@@ -1,7 +1,7 @@
 # Distributional Reachability Policy Optimization (DRPO)
 Code for the paper [**"Safe Model-Based Reinforcement Learning with an Uncertainty-Aware Reachability Certificate"**](https://arxiv.org/abs/2210.07553), co-authored by [Dongjie Yu*](https://manutdmoon.github.io/), [Wenjun Zou*](https://github.com/THUzouwenjun), Yujie Yang*, [Haitong Ma](https://mahaitongdae.github.io), Shengbo Eben Li, [Jingliang Duan](https://github.com/Jingliang-Duan) and [Jianyu Chen](http://people.iiis.tsinghua.edu.cn/~jychen/).
 
-The paper is submitted to IEEE Transactions on Automation Science and Engineering.
+The paper has been accepted by IEEE Transactions on Automation Science and Engineering. The final version will come soon.
 
 ## Acknowledgements
 The code is based on [SMBPO](https://github.com/gwthomas/Safe-MBPO) by Garrett Thomas. Thank him for his wonderful and clear implementation.
