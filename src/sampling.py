@@ -227,6 +227,28 @@ class ConstraintSafetySampleBuffer(SafetySampleBuffer):
         super().__init__(*args, **kwargs)
         con_val_dim = [] if con_dim == 1 else [con_dim]
         self._create_buffer('constraint_values', torch.float, con_val_dim)
+    
+    @classmethod
+    def from_h5py(cls, path, device=device):
+        with h5py.File(path, 'r') as f:
+            data = {name: torchify(np.array(f[name])) for name in f.keys()}
+        n_steps = len(data['rewards'])
+        if 'next_states' not in data:
+            all_states = data['states']
+            assert len(all_states) == n_steps + 1
+            data['states'] = all_states[:-1]
+            data['next_states'] = all_states[1:]
+        for v in data.values():
+            assert len(v) == n_steps
+
+        # Capacity, dimensions, and type of action inferred from h5py file
+        states, actions = data['states'], data['actions']
+        buffer = cls(state_dim=states.shape[1], action_dim=actions.shape[1], capacity=n_steps,
+                     discrete_actions=(not actions.dtype.is_floating_point),
+                     device=device,
+                     **{'con_dim': data['constraint_values'].shape[1] if data['constraint_values'].ndim > 1 else 1})
+        buffer.extend(**data)
+        return buffer
 
 
 def concat_sample_buffers(buffers):

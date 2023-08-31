@@ -14,6 +14,7 @@ def get_env(env_name, wrap_torch=True, rescale_action = True, **kwargs):
     from .env.quadrotor.quadrotor import QuadrotorWrapperEnv
     from .env.tracking.pyth_veh3dofconti_surrcstr_data import SimuVeh3dofcontiSurrCstr
     from .env.tracking.pyth_veh3dofconti_surrcstr_data4mpc import SimuVeh3dofcontiSurrCstr2
+    from .env.point_robot import PointRobot
     envs = {
         'hopper': HopperNoBonusEnv,
         'cheetah-no-flip': CheetahNoFlipEnv,
@@ -26,6 +27,7 @@ def get_env(env_name, wrap_torch=True, rescale_action = True, **kwargs):
         'quadrotor': QuadrotorWrapperEnv,
         'tracking': SimuVeh3dofcontiSurrCstr,
         'tracking_model': SimuVeh3dofcontiSurrCstr2,
+        'point-robot': PointRobot,
     }
     # if env_name != 'quadrotor':
     #     assert 'id' in kwargs.keys()

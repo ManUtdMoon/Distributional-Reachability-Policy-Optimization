@@ -70,6 +70,8 @@ def main(cfg):
             checkpointer.save(alg.epochs_completed)
             data_checkpointer.save()
     log(f"Best result {best_res} at epoch {best_epoch}.")
+    
+    # alg.replay_buffer.save_h5py(log.dir/f"real_buffer-{alg.epochs_completed}.h5py")
 
 
 if __name__ == '__main__':
