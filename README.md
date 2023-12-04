@@ -1,7 +1,8 @@
 # Distributional Reachability Policy Optimization (DRPO)
-Code for the paper [**"Safe Model-Based Reinforcement Learning with an Uncertainty-Aware Reachability Certificate"**](https://arxiv.org/abs/2210.07553), co-authored by [Dongjie Yu*](https://manutdmoon.github.io/), [Wenjun Zou*](https://github.com/THUzouwenjun), Yujie Yang*, [Haitong Ma](https://mahaitongdae.github.io), Shengbo Eben Li, [Jingliang Duan](https://github.com/Jingliang-Duan) and [Jianyu Chen](http://people.iiis.tsinghua.edu.cn/~jychen/).
+Code for the paper [**"Safe Model-Based Reinforcement Learning with an Uncertainty-Aware Reachability Certificate"**](https://ieeexplore.ieee.org/document/10329343), co-authored by [Dongjie Yu*](https://manutdmoon.github.io/), [Wenjun Zou*](https://github.com/THUzouwenjun), Yujie Yang*, [Haitong Ma](https://mahaitongdae.github.io), Shengbo Eben Li, Yuming Yin, [Jianyu Chen](http://people.iiis.tsinghua.edu.cn/~jychen/) and [Jingliang Duan](https://github.com/Jingliang-Duan). 
 
-The paper has been accepted by IEEE Transactions on Automation Science and Engineering. The final version will come soon.
+## Update
+The paper has been accepted by IEEE Transactions on Automation Science and Engineering. Check the final version [here](https://ieeexplore.ieee.org/document/10329343). Congrats to all co-authors!
 
 ## Acknowledgements
 The code is based on [SMBPO](https://github.com/gwthomas/Safe-MBPO) by Garrett Thomas. Thank him for his wonderful and clear implementation.
@@ -57,12 +58,14 @@ When contributing to this repository, please first discuss the change you wish t
 
 ## If you find our paper/codes helpful, welcome to cite:
 ```
-@misc{yu2022safe,
-  doi = {10.48550/ARXIV.2210.07553},
-  url = {https://arxiv.org/abs/2210.07553},
-  author = {Yu, Dongjie and Zou, Wenjun and Yang, Yujie and Ma, Haitong and Li, Shengbo Eben and Duan, Jingliang and Chen, Jianyu},  
-  title = {Safe Model-Based Reinforcement Learning with an Uncertainty-Aware Reachability Certificate},
-  publisher = {arXiv},
-  year = {2022},
+@ARTICLE{yu2023drpo,
+  author={Yu, Dongjie and Zou, Wenjun and Yang, Yujie and Ma, Haitong and Li, Shengbo Eben and Yin, Yuming and Chen, Jianyu and Duan, Jingliang},
+  journal={IEEE Transactions on Automation Science and Engineering}, 
+  title={Safe Model-Based Reinforcement Learning With an Uncertainty-Aware Reachability Certificate}, 
+  year={2023},
+  volume={},
+  number={},
+  pages={1-14},
+  doi={10.1109/TASE.2023.3292388}
 }
 ```
